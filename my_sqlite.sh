@@ -3,12 +3,12 @@
 # author: Uwe Sülzle
 # cdate: 2020-01-31
 
-export PATHDB="/root/my_databases"
+export PATHDB="$HOME/my_databases"
 export DBMUSIC="$PATHDB/mymusic.sqlite"
 export DBFILE="$PATHDB/myfiles.sqlite"
 export DBBLOB="$PATHDB/myblobs.sqlite"
 export DBAKT="$DBMUSIC"
-export RSFILE="/root/my_databases/result/rsfile.csv"
+export RSFILE="$PATHDB/result/rsfile.csv"
 export RSMAX=0 result="" RSNODATA=100
 export RSLAST=0
        declare -a RS

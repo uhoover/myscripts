@@ -13,6 +13,13 @@
         declare -t true=0
         declare -t false=1
         declare -t TMPF="/tmp/tmpfile.csv"
+        [ ! -d "$HOME/log" ] && mkdir "$HOME/log"
+        declare -t SYSLOG="$HOME/log/syslog.log"
+        declare -t log_on=1
+        declare -t echo_on=0
+        declare -t debug_on=0
+		declare -t verbose_on=0
+		export MYPATH="$HOME/my_scripts"
 function func_help () {
     [ $# -gt 1 ] && echo "         Wert unzulaessig: $2"
     echo "         $1 -- usage:"
@@ -97,11 +104,6 @@ function func_print_script() {
     while read -r line; do        
          if [ "${line:0:${#end}}" == "$end" ]; then        break; fi
          if [ "$found" -gt 0 ]; then log "$line";continue; fi
-        # if [ "$start" == "" ]; then
-         #     log debug "start gefunden"  
-          #    found=1
-           #   continue;
-        # fi
          if [ "${line:0:${#start}}" == "$start" ]; then found=1; fi  
     done < $file        
 }
@@ -109,7 +111,7 @@ function func_log_logfile() {
 	logfile=$0
     file="${logfile##*/}"
     file="${file%\.*}"
-    logfile='/home/uwe/log/'"$file"'.txt' 
+    logfile="$HOME"'/log/'"$file"'.log' 
 	echo "$logfile"
 }
 function log() {
@@ -138,6 +140,7 @@ function log() {
 	    elif [ "${!i}" == "stop" ];        then    stopit=1 
 	    elif [ "${!i}" == "ende" ];        then    stopit=1 
 	    elif [ "${!i}" == "end" ];         then    stopit=1 
+	    elif [ "${!i}" == "tlog" ];        then    shift;tlog $logfile 
 	    else                                       args="$args${!i} " 
 	    fi
 	done
@@ -145,17 +148,15 @@ function log() {
 	if [ $stopit  -gt 0 ];then verbose_on=0;func_end;        fi  
 }
 function func_log() {                
-    if [ "$1" == "logfile" ];    then shift; logfile=$@; return;    fi
     if [ "$debug"  -gt  0 ] && [ "$debug_on"  -lt  1 ]; then return;fi
     if [ "$verbose_on" -gt  0 ]; then 
-        funcname=$(left "${FUNCNAME[2]}" 10 )
+
+        funcname="${FUNCNAME[2]}";if [ "$funcname" == "" ];then funcname="bash";fi
+        funcname=$(left "${funcname}" 10 )
 		set -- $(date "+%Y-%m-%d %H:%M:%S")" ${funcname}" "$@"
-# 		set -- $(date "+%Y-%m-%d %H:%M:%S")"_${FUNCNAME[2]}" "$@"
 	fi 
-#	echo "logfile $logfile"
-#	set +x      
     if [ "$log_on" -gt  0 ];     then
-		if [ "$logfile" == "" ];  then logfile="/home/uwe/log/start.log"   ;fi
+		if [ "$logfile" == "" ];  then logfile="$SYSLOG"   ;fi
 		if [ "$ohnevorschub" -lt 1  ]; then
 			echo -e      "$@" >> $logfile
 		else		
@@ -169,15 +170,15 @@ function func_log() {
 			echo -e -n   "$@"  
 		fi
     fi  
- #   set +x         
 }
 function func_start() {        
     info="$(date "+%Y-%m-%d %H:%M:%S")  $(hostname) $0: START\n"
-    if [ "$logfile" == "" ] ; then logfile="/home/uwe/log/syslog.txt";fi
+    if [ "$logfile" == "" ] ; then logfile="$SYSLOG";fi
     func_log $info
 }
 function func_end() {
-    info=" \n$(date "+%Y-%m-%d %H:%M:%S")  $(hostname) $0: STOP - rc = $? CPU-TIME $SECONDS \n"
+	rc=$?; if [ "$retcode" != "" ]; then rc=$retcode;fi
+    info=" \n$(date "+%Y-%m-%d %H:%M:%S")  $(hostname) $0: STOP - rc = $rc CPU-TIME $SECONDS \n"
     func_log $info
 }
 function func_date2stamp () {
@@ -1019,21 +1020,23 @@ trap_init
 #export -f trap_at
 #export -f trap_change
 #export -f trap_when
-log_on=1
-echo_on=0
-debug_on=0
-verbose_on=0
+#log_on=1
+#echo_on=0
+#debug_on=0
+#verbose_on=0
 
 #export logfile="/root/uwelog.txt"
-#export MYPATH="~/my_scripts"
-#if [ -d "$MYPATH" ]; then
-#    log "oldpath $PATH" 
-#    export PATH="$PATH:$MYPATH"
-#    log "newpath $PATH" 
-#fi
+
 #export PATHGIT="/mnt/fritzbox/USBDISK2-0-01/gitrepros"
-alias mclear='printf "\033c"'
+
 #alias pfritz='cd "/mnt/fritzbox/USBDISK2-0-01"'
 #alias pscript='cd "/root/my-applications/my_scripts"'
 #export pdb='/root/my_databases/parmtb.sqlite'
 #export ptb='parm'
+
+	if [ -d "$MYPATH" ]; then
+		log debug "oldpath $PATH" 
+		export PATH="$PATH:$MYPATH"
+		log debug "newpath $PATH" 
+	fi
+	alias mclear='printf "\033c"'
