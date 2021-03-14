@@ -1,38 +1,4 @@
 #!/bin/bash
-#!/bin/bash -e
-#!/usr/local/bin/gtkdialog -e
-# author uwe suelzle
-# created 202?-??-??
-# function: 
-#
- source /home/uwe/my_scripts/my_functions.sh
- trap axit EXIT
-function axit() {
-	retcode=0 
-  	if [ "$cmd" = "" ]; then log stop;fi
-} 
-#
- 	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
-	tpath="$path/tmp"  
-	[ ! -d "$path" ]  && mkdir "$path"  
-	[ ! -d "$tpath" ] && mkdir "$tpath"  
-	x_configfile="$path/.configrc"   
-	parmtb="parmneu" true=0 false=1
-	lfile="/home/uwe/log/gtkdialog.txt" 
-    tmpmodus=$false;master="/home/uwe/my_databases/parmtb.sqlite"	
-    if [ "$tmpmodus" == "$true" ];then	  
-	    [ ! -f "$tpath/$(basename $master)" ] && cp "$master" "$tpath"
-	    master="$tpath/parmtb.sqlite" 
-	fi
-	script=$(readlink -f $0)   
-	parmdb="$master" 
-	changexml="$tpath/change.xml" 
-	idfile="$tpath/id.txt" 
-	efile="$tpath/error.txt" 
-	tmpf="$tpath/dialogtmp.txt"
-	tableinfo="$tpath/tableinfo.txt"  
-	valuefile="$tpath/value.txt"
-#
 function gui_rc_entrys_hbox () {
 	log $@
 	PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
@@ -60,9 +26,20 @@ function gui_rc_entrys_variable_list () {
 	local line="";del=" "
 	for ((ia=1;ia<=${#name[@]};ia++)) ;do
 		if [ "${name[$ia]}" == "$PRIMKEY" ];then continue;fi;
+#		line=$line'"'$del'""$entry'"$ia"'"';del="|"
 		line=$line$del'$entry'$ia;del="|"
 	done
 	echo "\"$line\""
+}
+function gui_rc_entrys_variable_list_save () {
+	log $@
+	PRIMKEY="$1";shift;ID="$1";shift;IFS=",";name=($1);unset IFS;shift 
+	local line=""
+	for ((ia=1;ia<=${#name[@]};ia++)) ;do
+		if [ "${name[$ia]}" == "$PRIMKEY" ];then continue;fi;
+		line=$line' "$entry'"$ia"'"'
+	done
+	echo $line
 }
 function gui_rc_get_dialog () {
 	log debug $@
@@ -151,7 +128,7 @@ function gui_tb_get_dialog () {
 					<variable>CBOXENTRY'$tb'</variable>
 					<default>'"$defaulttable"'</default>
 					<sensitive>true</sensitive>
-					<input>'$script' func sql_read_table_parmtb ".header off\nselect tb from '$parmtb' where typ = 2 and active = 0 and db = \"$CBOXDBSEL'$tb'\";"</input>
+					<input>'$script' func sql_read_table_parmtb ".header off\nselect tb from $parmtb where typ = 2 and active = 0 and db = \"$CBOXDBSEL'$tb'\";"</input>
 					<action type="clear">TREE'$tb'</action>
 					<action type="refresh">CBOXWHERE'$tb'</action>
 					<action type="refresh">TREE'$tb'</action>
@@ -205,6 +182,15 @@ function setmsg () {
 	log setmsg $*
 	zenity --notification --text="$*" 
 }
+function log () { 
+	[ "$1" 			== "logon"  ] && log $(date +"%y-%m-%d-%T:%N") "--------- start" $0 && return;
+	[ "$1" 			== "logoff" ] && log $(date +"%y-%m-%d-%T:%N") "--------- stop"  $0 && return;
+	[ "$1" 			== "debug"  ] && [ "$logdebug" == "$false" ] 					   && return;
+	[ "$1" 			== "debug"  ] && shift;
+	[ "$1" 			== "-" 	    ] && shift && setmsg $@
+	[ "$logverbose" == "$true"  ] && set -- $(date +"%y-%m-%d-%T:%N") ${FUNCNAME[1]:0:10}  $@;
+	echo -e "$@" >> "$lfile";
+}
 function sql_get_where () {
 	local tb="$1";shift;local db=$@
 	stmt=".header off\nselect distinct value from $parmtb where typ in (5,6) and active = 0 and db = \"$db\" and tb = \"$tb\";"
@@ -222,13 +208,14 @@ function sql_get_stmt () {
 	fi
 }
 function sql_read_table_parmtb () {
-	echo -e $@ | sqlite3 $parmdb 2> "$efile" | tr -d '\r'
-	err=$(<$efile)
-	if [ "$err" != "" ];then log "- $@ $err";fi
+	echo -e $@ | sqlite3 $parmdb 2> $tpath/sql_error.txt | tr -d '\r'
+	err=$(<$tpath/sql_error.txt)
+	if [ "$err" != "" ];then log "- $@ $err";echo error;fi
 }
 function sql_rc_read () {
 	log debug $@
 	local mode=$1;shift;PRIMKEY=$1;shift;row=$1;
+#	if [ "$row" == "NULL" ] || [ "$row" == "" ] || [ "$row" == "=" ];then echo "ID=$ID";return ;fi
 	if [ "$row" == "NULL" ] || [ "$row" == "" ] || [ "$row" == "=" ];then row=$(cat $idfile);fi
 	if [ "$mode" == "eq" ];then where="where $PRIMKEY = $row ;";fi
 	if [ "$mode" == "lt" ];then where="where $PRIMKEY < $row order by $PRIMKEY desc limit 1;";fi
@@ -253,11 +240,13 @@ function sql_rc_ctrl () {
 		sql_rc_read eq $PRIMKEY $row > "$valuefile"
 	fi
     row_change_xml="$tpath/change_row_${tb}.xml"
+#    if [ ! -f "$row_change_xml" ];then gui_rc_get_dialog $row $tb $db $PRIMKEY $TNAME $TLINE  ;fi
     gui_rc_get_dialog $row $tb $db $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT 
 	gtkdialog -f "$row_change_xml" & # 2> /dev/null  
 }
 function sql_rc_back () { sql_rc_read lt $@; }
 function sql_rc_next () { sql_rc_read gt $@; }
+#function sql_rc_clear () { cp -f "$valuefile" "$valuefile.bak";echo "" > "$valuefile" ; }
 function sql_rc_clear () { echo "" > "$valuefile" ; }
 function sql_rc_update_insert () {
 	log sql_rc_update_insert_neu "$@"
@@ -304,11 +293,15 @@ function sql_rc_update_insert_save () {
     set +x
     log $@
 	mode=$1;shift;ID="$1";shift;PRIMKEY="$1";shift;TSELECT="$1";shift;TNOTN="$1";shift
+#	for arg in "$@";do echo ">" "$arg";done;return 
 	local ia=0;local iline="";local uline="";local del="";local val=""
 	IFS=",";names=($TSELECT);nulls=($TNOTN);unset IFS
 	for ((ia=0;ia<${#names[@]};ia++)) ;do
         val=$(echo "$1" | tr -d '"');shift
+#       echo $val
+#	    if [ "$val" != "" ] && [ "$val" != "${val//\ /}" ]; then val='"'$val'"';fi # bei leerzeichen hochkomma erforderlich
 	    if [ "$val" == "" ] && [ "$nulls[$ia]" != "1" ];    then  val='null';fi
+#		echo $val
 		uline="$uline$del${names[$ia]} = \"$val\""
 		iline="$iline$del\"$val\"";
 		del=","
@@ -329,6 +322,7 @@ function sql_rc_update_insert_save () {
 function sql_rc_delete () {
 	log $@
 	PRIMKEY=$1;shift;ID=$1
+#	id=$(tb_get_meta_val $ID)
 	yesno "$PRIMKEY=$id wirklich loeschen ?"
 	if [ $? -gt 0 ];then setmsg "Vorgang abgebrochen";return  ;fi
 	erg=$(sql_execute $"$db" "delete from $tb where $PRIMKEY = $ID;")  
@@ -343,15 +337,15 @@ function sql_rc_delete () {
 function sql_execute () {
 	set -o noglob
 	local db="$1";shift;stmt="$@"
-	echo -e "$stmt" | sqlite3 "$db" 2> $efile | tr -d '\r' 
-	error=$(<$efile)
+	echo -e "$stmt" | sqlite3 "$db" 2> $tpath/sql_error.txt | tr -d '\r' 
+	error=$(<$tpath/sql_error.txt)
 	if [ "$error" != "" ];then log - "sql_execute $error" $db $stmt;echo $error;fi
 }
 function sql_read_table ()  {
 	log debug $@
 	view="$1";shift;off="$1";shift;local tb="$1";shift;local db="$1";shift;where=$(echo $@ | tr -d '"')
 	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $tpath/export_${tb}.txt  
-	error=$(<$efile);if [ "$error" != "" ];then return;fi
+	error=$(<$tpath/sql_error.txt);if [ "$error" != "" ];then return;fi
 	if [ "$where" == "" ];then return;fi
 	stmt="update $parmtb set value = \"$where\" where typ = 5 and tb =\"$tb\" and db = \"$db\";"
 	erg=$(sql_execute $parmdb $stmt); if [ "$erg" != "" ];then return;fi
@@ -361,13 +355,12 @@ function sql_read_table ()  {
 	erg=$(sql_execute $parmdb $stmt);
 }
 function tb_create_dialog () {
-	log debug $@ 
-	log debug "-------"
+	log debug $@  
 	local dfile="$tpath/cd.xml"; [ -f "$dfile" ] && rm "$dfile"
 	local cfile="$tpath/cliste.txt";[ -f "$cfile" ] && rm "$cfile";local db=""	
 	while [ "$#" -gt "0" ];do
 		if   [ -f  "$1" ] && [ "$2" == "--all" ];then
-			sql_read_table_parmtb ".header off\n.separator ' '\nselect tb,tb,db from $parmtb where typ = 2 and active = 0 and db = \"$1\";" >> "$cfile" 
+			sql_read_table_parmtb ".header off\n.separator ' '\nselect tb,tb,db from $parmtb where typ = 2 and active = 0 and db = \"$db\";" >> "$cfile" 
 			shift
 		elif [ -f  "$1" ] && [ "$2" == "!" ];then
 		    dblabel=$(basename $1);tblabel=${dblabel%%\.*}
@@ -414,12 +407,8 @@ function tb_create_dialog () {
 		gui_tb_get_dialog "$dfltdb" "$tblabel" "$tb" "$dflttable" "$dfltwhere" "$label">> "$dfile" 
 	done < "$cfile"
 	if [ "$i" -gt "1" ];then echo "</notebook>" >> "$dfile";fi
-	log debug "-------"
-		log debug vor gtkdialog
-		log log_off
+	log  start gtkdialog -f $dfile
 	gtkdialog  -f "$dfile"
-	log log_on
-	log debug nach gtkdialog
 }
 function tb_db_names_user () {
 	log debug $@ 
@@ -446,6 +435,7 @@ function tb_db_names_user () {
 	while read -r line;do
 	    set -- $line;mode=$1;shift;db=$1;shift;tb=$1;shift
 	    if [ "$mode" != "<" ] && [ "$1" != ">" ] ;then continue ;fi
+#	    erg=$($(which rowchange) "info" "$tb" "$db");pk="${erg%%\ *}"
 	    IFS="@";marray=($(tb_meta_info "$tb" "$db"));unset IFS;pk="${marray[0]}"
 	    if [ "$pk" == "-" ]; 
 	        then log $db $tb hat keinen primarykey;where="limit 150"
@@ -473,7 +463,7 @@ function tb_db_names_user () {
 	if [ "$err" != "" ];then log "-" tb_db_names_user $err ;fi
 }
 function tb_get_meta_val   () {
-	nr=$1  
+	nr=$1 #;nr2=$(($nr+1))
 	str=$(head -n $(($nr+1)) "$valuefile" | tail -n 1)
 	str="${str#*\= }"
 	IFS="|";arrmeta=($TLINE);IFS=",";meta=(${arrmeta[$nr]});unset IFS
@@ -508,12 +498,34 @@ function tb_meta_info () {
 	done < $tableinfo
 	echo "$PRIMKEY@ID@$TNAME@$TTYPE@$TNOTN@$TDFLT@$TPKEY@$TLINE@$TSELECT"  
 }
-function zz () {
-	return
-}
-	if [ "$1" = "func" ];then shift;log file;cmd="--";$*;exit ;fi 
-	log file new start verbose_on debug_on; log tlog
-	if [ "$1" = "sql_rc_ctrl" ];then shift;log file;sql_rc_ctrl $@;cmd="--";exit ;fi  
+	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
+	export tpath="/tmp/${folder%%\.*}"  
+	[ ! -d "$path" ]  && mkdir "$path"  
+	[ ! -d "$tpath" ] && mkdir "$tpath"  
+	export x_configfile="$path/.configrc"   
+	export parmtb="parmneu" true=0 false=1
+	export lfile="/home/uwe/log/gtkdialog.txt" logdebug=$true logverbose=$true 
+    tmpmodus=$false;master="/home/uwe/my_databases/parmtb.sqlite"	
+    if [ "$tmpmodus" == "$true" ];then	  
+	    [ ! -f "$tpath/$(basename $master)" ] && cp "$master" "$tpath"
+	    master="$tpath/parmtb.sqlite" 
+	fi
+	script=$(readlink -f $0)   
+	export parmdb="$master" 
+	export -f log  tb_db_names_user tb_meta_info
+	export -f sql_read_table  sql_execute sql_read_table_parmtb sql_get_where
+##
+	export changexml="$tpath/change.xml" idfile="$tpath/id.txt" tmpf="$tpath/dialogtmp.txt"
+	export tableinfo="$tpath/tableinfo.txt"  valuefile="$tpath/value.txt"
+	export -f sql_rc_ctrl   sql_rc_clear   sql_rc_delete   sql_rc_read
+	export -f gui_rc_get_dialog gui_rc_entrys_action_refresh gui_rc_entrys_hbox gui_rc_entrys_variable_list
+	export -f tb_meta_info tb_get_meta_val log yesno sql_execute sql_rc_update_insert
+	export TNAME="" TTYPE="" TNOTN="" TDFLT="" TPKEY="" TLINE="" TSELECT=""
+	if [ "$1" = "func" ];then shift; $*;exit ;fi 
+##
+    if [ "$#" == "0" ];then set --  "$parmdb" "$parmtb";fi  	
+    log "----";log "----";log "----";log "----";log logon
+	if [ "$1" == "sql_rc_ctrl" ];then shift;sql_rc_ctrl $@;log logoff;exit ;fi  
 	refresh=$false;notable=$false;parm=""
 	while [ "$#" -gt 0 ];do
         if   [ "$1" == "--refresh" ]; then refresh=$true 
@@ -525,4 +537,5 @@ function zz () {
 	if [ ! -f "$tpath/refreshed.txt" ];then refresh=$true;touch "$tpath/refreshed.txt" ;fi
     tb_db_names_user $refresh #;exit
 	tb_create_dialog $parm
+	log logoff  
 
