@@ -15,25 +15,23 @@ function axit() {
  	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
 	tpath="$path/tmp"  
 	[ ! -d "$path" ]  && mkdir "$path"  
-	[ ! -d "$path/tmp" ] && mkdir "$path/tmp"  
-	x_configfile="$path/.configrc" 
-	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi  
- source $x_configfile
+	[ ! -d "$tpath" ] && mkdir "$tpath"  
+	x_configfile="$path/.configrc"   
 	parmtb="parmneu" true=0 false=1
 	lfile="/home/uwe/log/gtkdialog.txt" 
     tmpmodus=$false;master="/home/uwe/my_databases/parmtb.sqlite"	
     if [ "$tmpmodus" == "$true" ];then	  
-	    [ ! -f "$path/tmp/$(basename $master)" ] && cp "$master" "$path/tmp"
-	    master="$path/tmp/parmtb.sqlite" 
+	    [ ! -f "$tpath/$(basename $master)" ] && cp "$master" "$tpath"
+	    master="$tpath/parmtb.sqlite" 
 	fi
 	script=$(readlink -f $0)   
 	parmdb="$master" 
-	changexml="$path/tmp/change.xml" 
-	idfile="$path/tmp/id.txt" 
-	efile="$path/tmp/error.txt" 
-	tmpf="$path/tmp/dialogtmp.txt"
-	tableinfo="$path/tmp/tableinfo.txt"  
-	valuefile="$path/tmp/value.txt"
+	changexml="$tpath/change.xml" 
+	idfile="$tpath/id.txt" 
+	efile="$tpath/error.txt" 
+	tmpf="$tpath/dialogtmp.txt"
+	tableinfo="$tpath/tableinfo.txt"  
+	valuefile="$tpath/value.txt"
 #
 function gui_rc_entrys_hbox () {
 	log $@
@@ -124,66 +122,36 @@ function gui_rc_get_dialog () {
 	</hbox>
 </vbox>' > "$row_change_xml"	
 }
-function gui_tb_get_default () {
-#	log $* #;read -p weiter
-	if [ "$*" = "" ] || [ "$*" = "-" ] || [ "$*" = '""' ];then echo "";return  ;fi
-	echo "<default>$*</default>"
-}
 function gui_tb_get_dialog () {
 	log debug $@
-	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*" 
-	if [ "$dfltdb" = "-" ];then str="";else str="$dfltdb";fi;eval 'export CBOXDBSEL'$tb'='$str 
-	if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
-	if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
-	if [ "$dfltwhere" = "-" ];then str="";else str="$dfltwhere";fi;eval 'export CBOXWHERE'$tb'="'$str'"' 
-#	errmsg "gui_tb_get_dialog 1 dfltwhere $dfltwhere string $str export" $(eval 'echo $CBOXWHERE'$tb);
-	if [ "$tb" = "$dflttb" ]; then
-		IFS="@";marray=($(tb_meta_info "$dflttb" "$dfltdb"));unset IFS
-		pk="${marray[0]}"
-		label=$(echo "${marray[2]}"| tr ',' '|')
-		visibleHD="true";off="on"
-	else
-	    if [ "$dfltlabel" == "" ]; then
-		    str="_____";del="";dfltlabel=""
-		    for ((ia=1;ia<11;ia++)) ;do dfltlabel=$dfltlabel$del$str$ia$str;del="|";done
-		fi 
-		label=$dfltlabel
-		visibleHD="false";off="off"
-	fi
-	set +x
-	if [ "$dflttb" != "-" ];
-		then off="off" #;visibleTB="true" ;visibleDB="false"
-		else off="on"  #;visibleTB="false";visibleDB="true"
+	defaultdb=$1;shift;tb="$1";shift;tb2="$1";shift;defaulttable="$1";shift;defaultwhere="$1";shift;label="$1"  
+	if [ "$tb2" != "-" ];
+		then off="off";visible1="true" ;visible2="false"
+		else off="on";visible1="false";visible2="true"
 	fi  
 	echo  '
 	<vbox>
-		<tree headers_visible="'$visibleHD'" autorefresh="true" hover_selection="false" hover_expand="true" exported_column="0">
+		<tree headers_visible="'$visible1'" autorefresh="true" hover_selection="false" hover_expand="true" exported_column="0">
 			<label>'"$label"'</label>
 			<height>500</height><width>600</width> 
 			<variable>TREE'$tb'</variable>
-			<input>'$script' func sql_read_table '$off' '$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' "$CBOXWHERE'$tb'"</input>
-			<action>'$script' func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
+			<input>'$script' func sql_read_table '$tb' '$off' $CBOXENTRY'$tb' $CBOXDBSEL'$tb' $CBOXWHERE'$tb'</input>
+			<action>'$script' func sql_rc_ctrl $TREE'$tb' $CBOXENTRY'$tb' $CBOXDBSEL'$tb'</action>
 			<action type="enable">BUTTONAENDERN'$tb'</action>
 		</tree>
 		<frame click = selection >
 			<hbox homogenoues="true">
-			    <hbox visible="'$visibleDB'">
-					<entry width-chars="30" accept="file">
-						'$(gui_tb_get_default $dfltdb)'
-						<variable>CBOXDBSEL'$tb'</variable>
-					</entry>
-					<button>
-						<input file stock="gtk-open"></input>
-						<variable>FILESEL'$tb'</variable>
-						<action type="fileselect">CBOXDBSEL'$tb'</action>
-						<action type="refresh">CBOXENTRY'$tb'</action>
-					</button>
-				</hbox>
-				<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="'$visibleTB'">
+				<comboboxtext space-expand="true" space-fill="true" visible="'$visible2'">
+					<variable>CBOXDBSEL'$tb'</variable>
+					<default>'"$defaultdb"'</default>
+					<input file>'$tpath'/dblist.txt</input>
+					<action type="refresh">CBOXENTRY'$tb'</action>
+				</comboboxtext>
+				<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="'$visible2'">
 					<variable>CBOXENTRY'$tb'</variable>
-					'$(gui_tb_get_default $dflttb)'
+					<default>'"$defaulttable"'</default>
 					<sensitive>true</sensitive>
-					<input>'$script' func x_get_tables $CBOXDBSEL'$tb' '$tb'</input>
+					<input>'$script' func sql_read_table_parmtb ".header off\nselect tb from '$parmtb' where typ = 2 and active = 0 and db = \"$CBOXDBSEL'$tb'\";"</input>
 					<action type="clear">TREE'$tb'</action>
 					<action type="refresh">CBOXWHERE'$tb'</action>
 					<action type="refresh">TREE'$tb'</action>
@@ -191,7 +159,7 @@ function gui_tb_get_dialog () {
 			</hbox>
 			<comboboxentry auto-refresh="true">
 				<variable>CBOXWHERE'$tb'</variable>
-				'$(gui_tb_get_default $dfltwhere)'
+				<default>"'$defaultwhere'"</default>
 				<input>'$script' func sql_get_where $CBOXENTRY'$tb' $CBOXDBSEL'$tb'</input>
 				<action signal="activate" type="refresh">TREE'$tb'</action>
 			</comboboxentry>
@@ -235,45 +203,7 @@ function yesno () {
 }
 function setmsg () {
 	log setmsg $*
-	case "$1" in
-		"-w"|"--warning") 			type="--warnig"			;;
-		"-e"|"--error")   			type="--error"			;;
-		"-i"|"--info")    			type="--info"  			;;
-		"-n"|"--notificatio")    	type="--notification"	;;
-		*)							type="--notification"
-	esac
-	zenity $type --text="$*" 
-}
-function getdbname () { echo "$*" | tr -d '/.'; }
-function setconfig () {
-	label=$1;shift;db=$1;shift;tb=$1;shift;where=$*
-	log $label $db $tb $where
-	return
-	field="$1";shift;value="$1";shift;append="$1";shift;comment="$*"
-	if [ "$field" = "dflttable" ]; then
-#		setmsg $homeuwemy_databasesmymusicsqlite
-		eval 'dflttb=$'$(getdbname $value)
-		comment="defaulttable $value";field=$(getdbname $value);value=$append;append="-"
-	fi
-	line="$field=\"$value\" # $comment"
-	if [ "$append" = "+" ];then echo "$line" >> "$x_configfile"  ;return  ;fi
-	grep "$comment" $x_configfile > /dev/null;
-	status=$?
-	if [ "$status" -gt "0" ];then echo "$line" >> "$x_configfile"  ;return  ;fi
-	grep "$line" $x_configfile > /dev/null;
-	status=$?
-	if [ "$status" = "0" ];then return  ;fi
-	cp -f "$x_configfile" "$path/tmp/configrc"  
-	grep -v "$comment" "$path/tmp/configrc" > "$x_configfile"
-	echo "$field=\"$value\" # $comment" >> "$x_configfile"
-}
-function errmsg () {
-	log errmsg $*
-	zenity --error --text="$*" 
-}
-function warnmsg () {
-	log warnmsg $*
-	zenity --warning --text="$*" 
+	zenity --notification --text="$*" 
 }
 function sql_get_where () {
 	local tb="$1";shift;local db=$@
@@ -284,7 +214,7 @@ function sql_get_stmt () {
 	local typ=$1;shift;local active=$1;shift;local db="$1";shift;local tb="$1";shift;local lb=$1;shift;local val=$1;shift;local info=$@
 	str=${active%%\)*};str=${str##*\(};active=${str%%\,*}
 	str=$(echo $typ,"$db",$tb | tr -d '"');  
-	erg=$(grep "$str" $path/tmp/default.txt)
+	erg=$(grep "$str" $tpath/default.txt)
 	if [ "$erg" == "" ];then
 		echo "insert into $parmtb (typ,active,db,tb,label,value,info) values ($typ,$active,\"$db\",\"$tb\",\"$lb\",\"$val\",\"$info\");"
 	else
@@ -310,16 +240,9 @@ function sql_rc_read () {
     echo $row  > $idfile
     cp -f "$valuefile" "$valuefile.bak"
 }
-function x_get_tables () {
-	log $*
-	if [ "$#" -lt "2" ];then setmsg "Reiter $1\nBitte eine sqlite Datenbank auswaehlen" ;return ;fi
-	if [ -d "$1" ];then setmsg "$1 ist ein Ordner\nBitte sqlite_db ausaehlen" ;return ;fi
-	sql_execute "$1" '.tables' | fmt -w 2
-	if [ "$(<$efile)" != "" ];then return;fi  
-}
 function sql_rc_ctrl () {
 	log debug $@
-	row="$1";shift;db="$1";shift;tb="$@"
+	row="$1";shift;export tb="$1";shift;export db="$@"
 	IFS="@";marray=($(tb_meta_info "$tb" "$db"));unset IFS
 	PRIMKEY=${marray[0]};ID=${marray[1]}
 	TNAME=${marray[2]};TTYPE=${marray[3]};TNOTN=${marray[4]};TDFLT=${marray[4]};TLINE=${marray[7]};TSELECT=${marray[8]}
@@ -329,7 +252,7 @@ function sql_rc_ctrl () {
 	else
 		sql_rc_read eq $PRIMKEY $row > "$valuefile"
 	fi
-    row_change_xml="$path/tmp/change_row_${tb}.xml"
+    row_change_xml="$tpath/change_row_${tb}.xml"
     gui_rc_get_dialog $row $tb $db $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT 
 	gtkdialog -f "$row_change_xml" & # 2> /dev/null  
 }
@@ -422,16 +345,12 @@ function sql_execute () {
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db" 2> $efile | tr -d '\r' 
 	error=$(<$efile)
-	if [ "$error" != "" ];then errmsg "sql_execute $error" $db $stmt;echo "";return 1;fi
+	if [ "$error" != "" ];then log - "sql_execute $error" $db $stmt;echo $error;fi
 }
 function sql_read_table ()  {
-	log $@
-	off=$1;shift;view="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
-	if [ "$db" = "" ];then setmsg -w "sql_read_table: keine datenbank uebergeben - $*" ;return  ;fi
-	if [ "$tb" = "" ];then setmsg -w "sql_read_table: keine tabelle uebergeben - $*" ;return  ;fi
-	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $path/tmp/export_${tb}.txt  
-	setconfig "$view" "$db" "$tb" "$where" 
-	return
+	log debug $@
+	view="$1";shift;off="$1";shift;local tb="$1";shift;local db="$1";shift;where=$(echo $@ | tr -d '"')
+	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $tpath/export_${tb}.txt  
 	error=$(<$efile);if [ "$error" != "" ];then return;fi
 	if [ "$where" == "" ];then return;fi
 	stmt="update $parmtb set value = \"$where\" where typ = 5 and tb =\"$tb\" and db = \"$db\";"
@@ -443,81 +362,87 @@ function sql_read_table ()  {
 }
 function tb_create_dialog () {
 	log debug $@ 
-	local dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
-	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb) ;fi
-	if [ "$dfltdb"  = "" ]; then dfltdb="-" ;fi
-	log debug "db" $dfltdb "tb" $dflttb 
- 	local cfile="$path/tmp/cliste.txt";[ -f "$cfile" ] && rm "$cfile";db=""
- 	notebook="" 
+	log debug "-------"
+	local dfile="$tpath/cd.xml"; [ -f "$dfile" ] && rm "$dfile"
+	local cfile="$tpath/cliste.txt";[ -f "$cfile" ] && rm "$cfile";local db=""	
 	while [ "$#" -gt "0" ];do
-		if   [ -f  "$1" ];then
-			db=$1
-			if [ "$2" = "" ] || [ -f  "$2" ]; then 
-				dblabel=$(basename $db);tblabel=${dblabel%%\.*}
-				eval 'tb=$'$(getdbname $db)
-				if [ "$tb" = "" ];then tb="-" ;fi
-				echo $tblabel $db $tb "false" "true" >> $cfile # gui without db selection
-				notebook="$notebook $tblabel";
-			fi	
-		elif [ "$1" = "--all" ];then
-			x_get_tables "$db" > $tmpf 
-			while read -r line;do 
-				echo $line $db $line "false" "false" >> $cfile # gui without db,tb selection
-				notebook="$notebook $line"
-			done < $tmpf	 
-		else 
-			echo "$1 $db $1 false false"  >> "$cfile"
-			notebook="$notebook $1"; 
+		if   [ -f  "$1" ] && [ "$2" == "--all" ];then
+			sql_read_table_parmtb ".header off\n.separator ' '\nselect tb,tb,db from $parmtb where typ = 2 and active = 0 and db = \"$1\";" >> "$cfile" 
+			shift
+		elif [ -f  "$1" ] && [ "$2" == "!" ];then
+		    dblabel=$(basename $1);tblabel=${dblabel%%\.*}
+			echo "$tblabel "-" $db" | tr -d '\r' >> "$cfile"
+			shift
+		elif [ -f  "$1" ];     				then db=$1
+		elif [ "$db" == "" ] ;				then
+		    sql_read_table_parmtb ".header off\n.separator ' '\nselect tb,tb,db from $parmtb where typ = 2 and active = 0 and tb = \"$1\";"  >> "$cfile" 
+		else echo "$1 $1 $db" | tr -d '\r' >> "$cfile" 
 		fi
 	    shift		
 	done
-	if [ "$notable" != "$true" ];then 
-		echo "tabel $dfltdb $dflttb true true" >> "$cfile"
-		if [ "$notebook" != "" ];then notebook="$notebook tabel";fi
-	fi
-	if [ "$notebook" != "" ];then 
-		echo "<notebook space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" > $dfile
-	fi
- 	[ -f $tmpf ] && rm $tmpf;where="-"
-	while read -r line;do 
-		set -- $line
-		if [ "$3" != "-" ]; then
-			eval 'where=$'$(getdbname $2)$1
-		else
-			where="-"
-		fi
-#		warnmsg 
-	    if [ "$where" = "" ];then where="-" ;fi	
-		printf "%-10s %-40s %-15s %s %s %s\n" $1 $2 $3 $4 $5 "$where" >> $tmpf
-		gui_tb_get_dialog $1 $2 $3 $4 $5 "$where" >> $dfile
-	done < $cfile
-	if [ "$notebook" != "" ];then echo "</notebook>" >> $dfile;fi
-#	cat $tmpf
-#  	cat $dfile
+	if [ "$notable" == "$false" ];then echo "tabel $parmtb $parmdb" >> "$cfile";fi
+	del="";notebook="<notebook space-expands=\"true\" tab-labels=\""
+	local i=0
+	while read -r line ;do
+		i=$(($i+1))
+		tb="${line%%\ *}"
+		if [ "$tb" == "helptable" ];then continue;fi
+		notebook="$notebook$del$tb";del="|"
+	done < "$cfile"
+	dfltsel0=".header off\nselect db from $parmtb where typ = 3 and active = 0 and db = "
+	dfltsel1=".header off\nselect db,tb from $parmtb where typ = 4 and active = 0 and db = "
+	dfltsel2=".header off\nselect value from $parmtb where typ = 5 and active = 0 and db = "
+    str="_____";del="";label2="";for ((ia=1;ia<11;ia++)) ;do label2=$label2$del$str$ia$str;del="|";done
+	if [ "$i" -gt "1" ];then echo $notebook"${del}table\">" > "$dfile";fi
+	while read -r line;do		
+		tblabel="${line%%\ *}";db="${line#*\ }";tb="${db%%\ *}";db="${db##*\ }"  
+		if [ "$tb" == "helptable" ];then continue;fi
+        dfltdb=$(sql_read_table_parmtb "$dfltsel0 \"$db\" and label = \"$tblabel\" limit 1;") 
+ 		if [ "$dfltdb" == "error" ]  ;then log "-" "error defaultdb $line";continue;fi
+		eval  "export CBOXDBSEL$tblabel=\$dfltdb";
+        dflttable=$(sql_read_table_parmtb "$dfltsel1 \"$db\" and label = \"$tblabel\" limit 1;") 
+ 		if [ "$dflttable" == "error" ]  ;then log "-" "error defaulttable $line";continue;fi
+        db2="${dflttable%%\,*}";dflttable="${dflttable##*\,}" 
+		eval  "export CBOXENTRY$tblabel=\$dflttable";
+		dfltwhere=$(sql_read_table_parmtb "$dfltsel2 \"$db\" and label = \"$tblabel\" limit 1;"| tr -d '"')
+		if [ "$dfltwhere" == "error" ]  ;then log "-" "error defaultwhere $line";continue;fi
+		eval  "export CBOXWHERE$tblabel=\$dfltwhere";
+        IFS="@";marray=($(tb_meta_info "$dflttable" "$db2"));unset IFS
+        pk="${marray[0]}";label=$(echo "${marray[2]}"| tr ',' '|')
+        if [ "$tblabel" == "tabel" ];then tb="-";fi
+        if [ "$tb"      == "-" ];    then label=$label2;fi
+		gui_tb_get_dialog "$dfltdb" "$tblabel" "$tb" "$dflttable" "$dfltwhere" "$label">> "$dfile" 
+	done < "$cfile"
+	if [ "$i" -gt "1" ];then echo "</notebook>" >> "$dfile";fi
+	log debug "-------"
+		log debug vor gtkdialog
+		log log_off
 	gtkdialog  -f "$dfile"
+	log log_on
+	log debug nach gtkdialog
 }
 function tb_db_names_user () {
 	log debug $@ 
 	local db="";local refresh=$1;shift;local dbsave=""
 	if [ "$#" -lt "1" ]; then  where=";"; else where="and db = \"$@\";";fi
-	sql_read_table_parmtb ".headers off\nselect distinct db from $parmtb where typ = 1 and active = 0 $where" > $path/tmp/dblist.txt
-    export defaultdbsel=$(head -1 $path/tmp/dblist.txt)
-	[ -f $path/tmp/nameslist.txt ] && rm $path/tmp/nameslist.txt
-	[ -f $path/tmp/stmtlist.txt ] && rm $path/tmp/stmtlist.txt
+	sql_read_table_parmtb ".headers off\nselect distinct db from $parmtb where typ = 1 and active = 0 $where" > $tpath/dblist.txt
+    export defaultdbsel=$(head -1 $tpath/dblist.txt)
+	[ -f $tpath/nameslist.txt ] && rm $tpath/nameslist.txt
+	[ -f $tpath/stmtlist.txt ] && rm $tpath/stmtlist.txt
 	while read -r db; do
 		tables=$(echo -e ".table" | sqlite3 $db) 
 		for tb in $tables;do
 			if [ "$tb" == "" ];then continue  ;fi
-			echo $db $tb >> $path/tmp/nameslist.txt
+			echo $db $tb >> $tpath/nameslist.txt
 		done
 		if [ "$refresh" == "$true" ];then
 			echo -e "delete from $parmtb where typ in (2) and db = \"$db\";" | sqlite3 $parmdb
 		fi 	
-	done < $path/tmp/dblist.txt
+	done < $tpath/dblist.txt
 	log debug $@ 
-	sql_read_table_parmtb "select typ,db,tb from $parmtb where typ in (2,3,4,5);" | tr -d '"' > $path/tmp/default.txt
-	sql_read_table_parmtb ".headers off\n.separator ' '\nselect db,tb from $parmtb where typ = 2;" > $path/tmp/nameslist2.txt
-	diff $path/tmp/nameslist.txt $path/tmp/nameslist2.txt |
+	sql_read_table_parmtb "select typ,db,tb from $parmtb where typ in (2,3,4,5);" | tr -d '"' > $tpath/default.txt
+	sql_read_table_parmtb ".headers off\n.separator ' '\nselect db,tb from $parmtb where typ = 2;" > $tpath/nameslist2.txt
+	diff $tpath/nameslist.txt $tpath/nameslist2.txt |
 	while read -r line;do
 	    set -- $line;mode=$1;shift;db=$1;shift;tb=$1;shift
 	    if [ "$mode" != "<" ] && [ "$1" != ">" ] ;then continue ;fi
@@ -529,22 +454,22 @@ function tb_db_names_user () {
 	    if [ "$db" != "$dbsave" ]; then
 			dblabel=$(basename $db);dblabel=${dblabel%%\.*}
 			dbsave=$db
-			sql_get_stmt 3 "(0)"    "$db" "$db" "$dblabel" "defaultdb"    "batch"   >> $path/tmp/stmtlist.txt
-			sql_get_stmt 4 "(0)"    "$db" "$tb" "$dblabel" "defaulttable" "batch"	>> $path/tmp/stmtlist.txt
-			sql_get_stmt 5 "(0)"    "$db" "$tb" "$dblabel" "$where" 	  "batch"	>> $path/tmp/stmtlist.txt
+			sql_get_stmt 3 "(0)"    "$db" "$db" "$dblabel" "defaultdb"    "batch"   >> $tpath/stmtlist.txt
+			sql_get_stmt 4 "(0)"    "$db" "$tb" "$dblabel" "defaulttable" "batch"	>> $tpath/stmtlist.txt
+			sql_get_stmt 5 "(0)"    "$db" "$tb" "$dblabel" "$where" 	  "batch"	>> $tpath/stmtlist.txt
 		fi
-	    sql_get_stmt 2 "(0,1)"  "$db"  "$tb" ""     ""            "batch" 			>> $path/tmp/stmtlist.txt
-	    sql_get_stmt 3 "(0)"    "$db"  "$db" "$tb" "defaultdb"    "batch" 			>> $path/tmp/stmtlist.txt
-	    sql_get_stmt 4 "(0)"    "$db"  "$tb" "$tb" "defaulttable" "batch" 			>> $path/tmp/stmtlist.txt
-	    sql_get_stmt 5 "(0)"    "$db"  "$tb" "$tb" "$where" 	  "batch"  			>> $path/tmp/stmtlist.txt
+	    sql_get_stmt 2 "(0,1)"  "$db"  "$tb" ""     ""            "batch" 			>> $tpath/stmtlist.txt
+	    sql_get_stmt 3 "(0)"    "$db"  "$db" "$tb" "defaultdb"    "batch" 			>> $tpath/stmtlist.txt
+	    sql_get_stmt 4 "(0)"    "$db"  "$tb" "$tb" "defaulttable" "batch" 			>> $tpath/stmtlist.txt
+	    sql_get_stmt 5 "(0)"    "$db"  "$tb" "$tb" "$where" 	  "batch"  			>> $tpath/stmtlist.txt
 	done
 	log debug $@ 
-	sql_get_stmt 3 "(0)" "$parmdb" "$parmdb"  "tabel" "defaultdb"    "batch" 		>> $path/tmp/stmtlist.txt
-	sql_get_stmt 4 "(0)" "$parmdb" "$parmtb"  "tabel" "defaulttable" "batch" 		>> $path/tmp/stmtlist.txt
-	sql_get_stmt 5 "(0)" "$parmdb" "$parmtb"  "tabel" "where id >= 0 limit 150" "batch" >> $path/tmp/stmtlist.txt
-	if [ ! -f $path/tmp/stmtlist.txt  ];then return ;fi
-	grep "insert" $path/tmp/stmtlist.txt > $path/tmp/sqlread.txt
-	err=$(sql_read_table_parmtb ".read \"$path/tmp/sqlread.txt\"")
+	sql_get_stmt 3 "(0)" "$parmdb" "$parmdb"  "tabel" "defaultdb"    "batch" 		>> $tpath/stmtlist.txt
+	sql_get_stmt 4 "(0)" "$parmdb" "$parmtb"  "tabel" "defaulttable" "batch" 		>> $tpath/stmtlist.txt
+	sql_get_stmt 5 "(0)" "$parmdb" "$parmtb"  "tabel" "where id >= 0 limit 150" "batch" >> $tpath/stmtlist.txt
+	if [ ! -f $tpath/stmtlist.txt  ];then return ;fi
+	grep "insert" $tpath/stmtlist.txt > $tpath/sqlread.txt
+	err=$(sql_read_table_parmtb ".read \"$tpath/sqlread.txt\"")
 	if [ "$err" != "" ];then log "-" tb_db_names_user $err ;fi
 }
 function tb_get_meta_val   () {
@@ -586,10 +511,9 @@ function tb_meta_info () {
 function zz () {
 	return
 }
-	if [ "$1" = "func" ];then shift;log file tlog debug;cmd="--";$*;exit ;fi 
-	log file tlog verbose_on debug_on
-	if [ "$1" = "sql_rc_ctrl" ];then shift;sql_rc_ctrl $@;cmd="--";exit ;fi 
-	log start 
+	if [ "$1" = "func" ];then shift;log file;cmd="--";$*;exit ;fi 
+	log file new start verbose_on debug_on; log tlog
+	if [ "$1" = "sql_rc_ctrl" ];then shift;log file;sql_rc_ctrl $@;cmd="--";exit ;fi  
 	refresh=$false;notable=$false;parm=""
 	while [ "$#" -gt 0 ];do
         if   [ "$1" == "--refresh" ]; then refresh=$true 
@@ -598,7 +522,7 @@ function zz () {
 		fi
 		shift
 	done
-	if [ ! -f "$path/tmp/refreshed.txt" ];then refresh=$true;touch "$path/tmp/refreshed.txt" ;fi
+	if [ ! -f "$tpath/refreshed.txt" ];then refresh=$true;touch "$tpath/refreshed.txt" ;fi
     tb_db_names_user $refresh #;exit
 	tb_create_dialog $parm
 
