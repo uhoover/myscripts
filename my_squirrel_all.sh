@@ -19,15 +19,15 @@ function axit() {
 	x_configfile="$path/.configrc" 
 	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi  
  source $x_configfile
-	parmtb="parmneu" true=0 false=1
+#d	parmtb="parmneu" true=0 false=1
 	lfile="/home/uwe/log/gtkdialog.txt" 
-    tmpmodus=$false;master="/home/uwe/my_databases/parmtb.sqlite"	
-    if [ "$tmpmodus" == "$true" ];then	  
-	    [ ! -f "$path/tmp/$(basename $master)" ] && cp "$master" "$path/tmp"
-	    master="$path/tmp/parmtb.sqlite" 
-	fi
+#d	tmpmodus=$false;master="/home/uwe/my_databases/parmtb.sqlite"	
+#d    if [ "$tmpmodus" == "$true" ];then	  
+#d	    [ ! -f "$path/tmp/$(basename $master)" ] && cp "$master" "$path/tmp"
+#d	    master="$path/tmp/parmtb.sqlite" 
+#d	fi
 	script=$(readlink -f $0)   
-	parmdb="$master" 
+#d	parmdb="$master" 
 	changexml="$path/tmp/change.xml" 
 	idfile="$path/tmp/id.txt" 
 	efile="$path/tmp/error.txt" 
@@ -86,27 +86,27 @@ function gui_rc_get_dialog () {
 	</frame>
 	<hbox>
 		<button><label>back</label>
-			<action>'$script' func sql_rc_read lt '$PRIMKEY' $entryp</action>
+			<action>'$script' func sql_rc_read '$db' '$tb' lt '$PRIMKEY' $entryp</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>next</label>
-			<action>'$script' func sql_rc_read gt '$PRIMKEY' $entryp</action>
+			<action>'$script' func sql_rc_read '$db' '$tb' gt '$PRIMKEY' $entryp</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>read</label>
-			<action>'$script' func sql_rc_read eq '$PRIMKEY' $entryp</action>
+			<action>'$script' func sql_rc_read '$db' '$tb' eq '$PRIMKEY' $entryp</action>
 			<action type="enable">BUTTONAENDERN</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>insert</label>
-			<action>'$script' func sql_rc_update_insert insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
+			<action>'$script' func sql_rc_update_insert '$db' '$tb' insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>update</label><variable>BUTTONUPDATE</variable>
-			<action>'$script' func sql_rc_update_insert update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
+			<action>'$script' func sql_rc_update_insert '$db' '$tb' update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
 		</button>
 		<button><label>delete</label>
-			<action>'$script' func sql_rc_delete '$PRIMKEY' $entryp</action>
+			<action>'$script' func sql_rc_delete '$db' '$tb' '$PRIMKEY' $entryp</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>clear</label>
@@ -136,7 +136,6 @@ function gui_tb_get_dialog () {
 	if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
 	if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
 	if [ "$dfltwhere" = "-" ];then str="";else str="$dfltwhere";fi;eval 'export CBOXWHERE'$tb'="'$str'"' 
-#	errmsg "gui_tb_get_dialog 1 dfltwhere $dfltwhere string $str export" $(eval 'echo $CBOXWHERE'$tb);
 	if [ "$tb" = "$dflttb" ]; then
 		IFS="@";marray=($(tb_meta_info "$dflttb" "$dfltdb"));unset IFS
 		pk="${marray[0]}"
@@ -236,10 +235,10 @@ function yesno () {
 function setmsg () {
 	log setmsg $*
 	case "$1" in
-		"-w"|"--warning") 			type="--warnig"			;;
+		"-w"|"--warning") 			type="--warning"			;;
 		"-e"|"--error")   			type="--error"			;;
 		"-i"|"--info")    			type="--info"  			;;
-		"-n"|"--notificatio")    	type="--notification"	;;
+		"-n"|"--notification")    	type="--notification"	;;
 		*)							type="--notification"
 	esac
 	zenity $type --text="$*" 
@@ -251,7 +250,6 @@ function setconfig () {
 	return
 	field="$1";shift;value="$1";shift;append="$1";shift;comment="$*"
 	if [ "$field" = "dflttable" ]; then
-#		setmsg $homeuwemy_databasesmymusicsqlite
 		eval 'dflttb=$'$(getdbname $value)
 		comment="defaulttable $value";field=$(getdbname $value);value=$append;append="-"
 	fi
@@ -267,38 +265,12 @@ function setconfig () {
 	grep -v "$comment" "$path/tmp/configrc" > "$x_configfile"
 	echo "$field=\"$value\" # $comment" >> "$x_configfile"
 }
-function errmsg () {
-	log errmsg $*
-	zenity --error --text="$*" 
-}
-function warnmsg () {
-	log warnmsg $*
-	zenity --warning --text="$*" 
-}
 function sql_get_where () {
-	local tb="$1";shift;local db=$@
-	stmt=".header off\nselect distinct value from $parmtb where typ in (5,6) and active = 0 and db = \"$db\" and tb = \"$tb\";"
-	sql_execute "$parmdb" "$stmt" | tr -d '"'  
-}
-function sql_get_stmt () {
-	local typ=$1;shift;local active=$1;shift;local db="$1";shift;local tb="$1";shift;local lb=$1;shift;local val=$1;shift;local info=$@
-	str=${active%%\)*};str=${str##*\(};active=${str%%\,*}
-	str=$(echo $typ,"$db",$tb | tr -d '"');  
-	erg=$(grep "$str" $path/tmp/default.txt)
-	if [ "$erg" == "" ];then
-		echo "insert into $parmtb (typ,active,db,tb,label,value,info) values ($typ,$active,\"$db\",\"$tb\",\"$lb\",\"$val\",\"$info\");"
-	else
-		echo "update $parmtb set typ=$typ,active=$active,db=\"$db\",tb=\"$tb\",label=\"$lb\",value=\"$val\",info=\"$info\" where id = $erg;"
-	fi
-}
-function sql_read_table_parmtb () {
-	echo -e $@ | sqlite3 $parmdb 2> "$efile" | tr -d '\r'
-	err=$(<$efile)
-	if [ "$err" != "" ];then log "- $@ $err";fi
+	return
 }
 function sql_rc_read () {
 	log debug $@
-	local mode=$1;shift;PRIMKEY=$1;shift;row=$1;
+	db=$1;shift;tb=$1;shift;local mode=$1;shift;PRIMKEY=$1;shift;row=$1;
 	if [ "$row" == "NULL" ] || [ "$row" == "" ] || [ "$row" == "=" ];then row=$(cat $idfile);fi
 	if [ "$mode" == "eq" ];then where="where $PRIMKEY = $row ;";fi
 	if [ "$mode" == "lt" ];then where="where $PRIMKEY < $row order by $PRIMKEY desc limit 1;";fi
@@ -327,7 +299,7 @@ function sql_rc_ctrl () {
 	if [ "$row" == "insert" ]; then
 		echo "" > "$valuefile" 
 	else
-		sql_rc_read eq $PRIMKEY $row > "$valuefile"
+		sql_rc_read $db $tb eq $PRIMKEY $row > "$valuefile"
 	fi
     row_change_xml="$path/tmp/change_row_${tb}.xml"
     gui_rc_get_dialog $row $tb $db $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT 
@@ -337,14 +309,14 @@ function sql_rc_back () { sql_rc_read lt $@; }
 function sql_rc_next () { sql_rc_read gt $@; }
 function sql_rc_clear () { echo "" > "$valuefile" ; }
 function sql_rc_update_insert () {
-	log sql_rc_update_insert_neu "$@"
-	mode=$1;shift;ID="$1";shift;PRIMKEY="$1";shift;TSELECT="$1";shift;TNOTN="$1";shift;value=$*
+	log debug "$@"
+	db=$1;shift;tb=$1;shift;mode=$1;shift;ID="$1";shift;PRIMKEY="$1";shift;TSELECT="$1";shift;TNOTN="$1";shift;value=$*
 	z=${#value};if [ "${value:(($z-1)):1}" == "|" ];then value=$value" ";fi
 	IFS=",";names=($TSELECT);nulls=($TNOTN)
 	IFS="|";values=($value)
 	unset IFS
 	if [ "${#names[@]}" -ne "${#values[@]}" ];then  
-	    setmsg "abbruch! fields: ${#names[@]} values ${#values[@]}"
+	    setmsg "-e" "abbruch! fields: ${#names[@]} values ${#values[@]}"
 	    log "$(declare -p names values)"
 	    return  
 	fi
@@ -367,54 +339,28 @@ function sql_rc_update_insert () {
 	erg=$error
 	log erg $erg
 	if [ "$erg" != "" ];then
-		setmsg  "abbruch rc = $erg : $stmt $db"
+		setmsg "-e" "abbruch rc = $erg : $stmt $db"
 		return
 	else
 	    setmsg "$mode erfolgreich"
 	fi
 	if [ "$mode" == "insert" ];then
 		row=$(sql_execute "$db" ".header off\nselect max($PRIMKEY) from $tb;" );
-		sql_rc_read eq $PRIMKEY $row
-	fi
-}
-function sql_rc_update_insert_save () {
-    set +x
-    log $@
-	mode=$1;shift;ID="$1";shift;PRIMKEY="$1";shift;TSELECT="$1";shift;TNOTN="$1";shift
-	local ia=0;local iline="";local uline="";local del="";local val=""
-	IFS=",";names=($TSELECT);nulls=($TNOTN);unset IFS
-	for ((ia=0;ia<${#names[@]};ia++)) ;do
-        val=$(echo "$1" | tr -d '"');shift
-	    if [ "$val" == "" ] && [ "$nulls[$ia]" != "1" ];    then  val='null';fi
-		uline="$uline$del${names[$ia]} = \"$val\""
-		iline="$iline$del\"$val\"";
-		del=","
-	done
-	if [ "$mode" == "insert" ];then
-		stmt="insert into $tb ($TSELECT) values ($iline);"
-	else
-		stmt="update $tb  set $uline where $PRIMKEY = $ID ;"
-	fi
-	erg=$(sql_execute "$db" "$stmt" )
-	log debug "rc = $erg : $stmt $db"
-	[ "$erg" == "" ] && erg="$mode erfolgreich" && setmsg $erg
-	if [ "$mode" == "insert" ];then
-		row=$(sql_execute "$db" ".header off\nselect max($PRIMKEY) from $tb;" );
-		sql_rc_read eq $PRIMKEY $row
+		sql_rc_read $db $tb eq $PRIMKEY $row
 	fi
 }
 function sql_rc_delete () {
-	log $@
-	PRIMKEY=$1;shift;ID=$1
+	log debug $@
+	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1
 	yesno "$PRIMKEY=$id wirklich loeschen ?"
-	if [ $? -gt 0 ];then setmsg "Vorgang abgebrochen";return  ;fi
+	if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
 	erg=$(sql_execute $"$db" "delete from $tb where $PRIMKEY = $ID;")  
 	[ "$erg" == "" ] && erg="delete erfolgreich" && setmsg $erg
 	erg=$(sql_execute $"$db" "select min($PRIMKEY) from $tb;")
 	if [ "$erg" -lt "$ID" ]; then
-	    sql_rc_read "lt" "$PRIMKEY" "$ID"
+	    sql_rc_read "$db" "$tb" "lt" "$PRIMKEY" "$ID"
 	else
-		sql_rc_read "gt" "$PRIMKEY" "$ID"
+		sql_rc_read "$db" "$tb" "gt" "$PRIMKEY" "$ID"
 	fi
 }
 function sql_execute () {
@@ -422,7 +368,7 @@ function sql_execute () {
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db" 2> $efile | tr -d '\r' 
 	error=$(<$efile)
-	if [ "$error" != "" ];then errmsg "sql_execute $error" $db $stmt;echo "";return 1;fi
+	if [ "$error" != "" ];then setmsg -e "sql_execute $error" $db "\n" $stmt;echo "";return 1;fi
 }
 function sql_read_table ()  {
 	log $@
@@ -431,15 +377,6 @@ function sql_read_table ()  {
 	if [ "$tb" = "" ];then setmsg -w "sql_read_table: keine tabelle uebergeben - $*" ;return  ;fi
 	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $path/tmp/export_${tb}.txt  
 	setconfig "$view" "$db" "$tb" "$where" 
-	return
-	error=$(<$efile);if [ "$error" != "" ];then return;fi
-	if [ "$where" == "" ];then return;fi
-	stmt="update $parmtb set value = \"$where\" where typ = 5 and tb =\"$tb\" and db = \"$db\";"
-	erg=$(sql_execute $parmdb $stmt); if [ "$erg" != "" ];then return;fi
-	stmt="select 1 from $parmtb where typ = 6 and tb =\"$tb\" and db = \"$db\" and value = \"$where\" limit 1;"
-	erg=$(sql_execute $parmdb $stmt); if [ "$erg" != "" ];then return;fi
-	stmt="insert into $parmtb (typ,active,db,tb,value) values (6,0,\"$db\",\"$tb\",\"$where\");"
-	erg=$(sql_execute $parmdb $stmt);
 }
 function tb_create_dialog () {
 	log debug $@ 
@@ -486,66 +423,12 @@ function tb_create_dialog () {
 		else
 			where="-"
 		fi
-#		warnmsg 
 	    if [ "$where" = "" ];then where="-" ;fi	
 		printf "%-10s %-40s %-15s %s %s %s\n" $1 $2 $3 $4 $5 "$where" >> $tmpf
 		gui_tb_get_dialog $1 $2 $3 $4 $5 "$where" >> $dfile
 	done < $cfile
 	if [ "$notebook" != "" ];then echo "</notebook>" >> $dfile;fi
-#	cat $tmpf
-#  	cat $dfile
 	gtkdialog  -f "$dfile"
-}
-function tb_db_names_user () {
-	log debug $@ 
-	local db="";local refresh=$1;shift;local dbsave=""
-	if [ "$#" -lt "1" ]; then  where=";"; else where="and db = \"$@\";";fi
-	sql_read_table_parmtb ".headers off\nselect distinct db from $parmtb where typ = 1 and active = 0 $where" > $path/tmp/dblist.txt
-    export defaultdbsel=$(head -1 $path/tmp/dblist.txt)
-	[ -f $path/tmp/nameslist.txt ] && rm $path/tmp/nameslist.txt
-	[ -f $path/tmp/stmtlist.txt ] && rm $path/tmp/stmtlist.txt
-	while read -r db; do
-		tables=$(echo -e ".table" | sqlite3 $db) 
-		for tb in $tables;do
-			if [ "$tb" == "" ];then continue  ;fi
-			echo $db $tb >> $path/tmp/nameslist.txt
-		done
-		if [ "$refresh" == "$true" ];then
-			echo -e "delete from $parmtb where typ in (2) and db = \"$db\";" | sqlite3 $parmdb
-		fi 	
-	done < $path/tmp/dblist.txt
-	log debug $@ 
-	sql_read_table_parmtb "select typ,db,tb from $parmtb where typ in (2,3,4,5);" | tr -d '"' > $path/tmp/default.txt
-	sql_read_table_parmtb ".headers off\n.separator ' '\nselect db,tb from $parmtb where typ = 2;" > $path/tmp/nameslist2.txt
-	diff $path/tmp/nameslist.txt $path/tmp/nameslist2.txt |
-	while read -r line;do
-	    set -- $line;mode=$1;shift;db=$1;shift;tb=$1;shift
-	    if [ "$mode" != "<" ] && [ "$1" != ">" ] ;then continue ;fi
-	    IFS="@";marray=($(tb_meta_info "$tb" "$db"));unset IFS;pk="${marray[0]}"
-	    if [ "$pk" == "-" ]; 
-	        then log $db $tb hat keinen primarykey;where="limit 150"
-	        else where="where $pk >= 0 limit 150"
-	    fi
-	    if [ "$db" != "$dbsave" ]; then
-			dblabel=$(basename $db);dblabel=${dblabel%%\.*}
-			dbsave=$db
-			sql_get_stmt 3 "(0)"    "$db" "$db" "$dblabel" "defaultdb"    "batch"   >> $path/tmp/stmtlist.txt
-			sql_get_stmt 4 "(0)"    "$db" "$tb" "$dblabel" "defaulttable" "batch"	>> $path/tmp/stmtlist.txt
-			sql_get_stmt 5 "(0)"    "$db" "$tb" "$dblabel" "$where" 	  "batch"	>> $path/tmp/stmtlist.txt
-		fi
-	    sql_get_stmt 2 "(0,1)"  "$db"  "$tb" ""     ""            "batch" 			>> $path/tmp/stmtlist.txt
-	    sql_get_stmt 3 "(0)"    "$db"  "$db" "$tb" "defaultdb"    "batch" 			>> $path/tmp/stmtlist.txt
-	    sql_get_stmt 4 "(0)"    "$db"  "$tb" "$tb" "defaulttable" "batch" 			>> $path/tmp/stmtlist.txt
-	    sql_get_stmt 5 "(0)"    "$db"  "$tb" "$tb" "$where" 	  "batch"  			>> $path/tmp/stmtlist.txt
-	done
-	log debug $@ 
-	sql_get_stmt 3 "(0)" "$parmdb" "$parmdb"  "tabel" "defaultdb"    "batch" 		>> $path/tmp/stmtlist.txt
-	sql_get_stmt 4 "(0)" "$parmdb" "$parmtb"  "tabel" "defaulttable" "batch" 		>> $path/tmp/stmtlist.txt
-	sql_get_stmt 5 "(0)" "$parmdb" "$parmtb"  "tabel" "where id >= 0 limit 150" "batch" >> $path/tmp/stmtlist.txt
-	if [ ! -f $path/tmp/stmtlist.txt  ];then return ;fi
-	grep "insert" $path/tmp/stmtlist.txt > $path/tmp/sqlread.txt
-	err=$(sql_read_table_parmtb ".read \"$path/tmp/sqlread.txt\"")
-	if [ "$err" != "" ];then log "-" tb_db_names_user $err ;fi
 }
 function tb_get_meta_val   () {
 	nr=$1  
@@ -599,6 +482,5 @@ function zz () {
 		shift
 	done
 	if [ ! -f "$path/tmp/refreshed.txt" ];then refresh=$true;touch "$path/tmp/refreshed.txt" ;fi
-    tb_db_names_user $refresh #;exit
 	tb_create_dialog $parm
 
