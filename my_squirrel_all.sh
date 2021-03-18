@@ -11,7 +11,6 @@ function axit() {
 	retcode=0 
   	if [ "$cmd" = "" ]; then log stop;fi
 } 
-#
  	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
 	tpath="$path/tmp"  
 	[ ! -d "$path" ]  && mkdir "$path"  
@@ -19,22 +18,14 @@ function axit() {
 	x_configfile="$path/.configrc" 
 	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi  
  source $x_configfile
-#d	parmtb="parmneu" true=0 false=1
 	lfile="/home/uwe/log/gtkdialog.txt" 
-#d	tmpmodus=$false;master="/home/uwe/my_databases/parmtb.sqlite"	
-#d    if [ "$tmpmodus" == "$true" ];then	  
-#d	    [ ! -f "$path/tmp/$(basename $master)" ] && cp "$master" "$path/tmp"
-#d	    master="$path/tmp/parmtb.sqlite" 
-#d	fi
 	script=$(readlink -f $0)   
-#d	parmdb="$master" 
 	changexml="$path/tmp/change.xml" 
 	idfile="$path/tmp/id.txt" 
 	efile="$path/tmp/error.txt" 
 	tmpf="$path/tmp/dialogtmp.txt"
 	tableinfo="$path/tmp/tableinfo.txt"  
 	valuefile="$path/tmp/value.txt"
-#
 function gui_rc_entrys_hbox () {
 	log $@
 	PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
@@ -125,9 +116,13 @@ function gui_rc_get_dialog () {
 </vbox>' > "$row_change_xml"	
 }
 function gui_tb_get_default () {
-#	log $* #;read -p weiter
-	if [ "$*" = "" ] || [ "$*" = "-" ] || [ "$*" = '""' ];then echo "";return  ;fi
-	echo "<default>$*</default>"
+	log debug "$*";str=$(echo "$*" | tr -d ' "-') 
+	if [ "$str" = "" ] ;then echo "";return  ;fi
+	if [ "$#" -gt "1" ];then 
+		echo "<default>\"$*\"</default>"
+	else 
+		echo "<default>$*</default>"
+	fi
 }
 function gui_tb_get_dialog () {
 	log debug $@
@@ -149,18 +144,17 @@ function gui_tb_get_dialog () {
 		label=$dfltlabel
 		visibleHD="false";off="off"
 	fi
-	set +x
-	if [ "$dflttb" != "-" ];
-		then off="off" #;visibleTB="true" ;visibleDB="false"
-		else off="on"  #;visibleTB="false";visibleDB="true"
-	fi  
+#	if [ "$dflttb" != "-" ];
+#		then off="off" #;visibleTB="true" ;visibleDB="false"
+#		else off="on"  #;visibleTB="false";visibleDB="true"
+#	fi  
 	echo  '
 	<vbox>
 		<tree headers_visible="'$visibleHD'" autorefresh="true" hover_selection="false" hover_expand="true" exported_column="0">
 			<label>'"$label"'</label>
 			<height>500</height><width>600</width> 
 			<variable>TREE'$tb'</variable>
-			<input>'$script' func sql_read_table '$off' '$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' "$CBOXWHERE'$tb'"</input>
+			<input>'$script' func sql_read_table '$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' "$CBOXWHERE'$tb'"</input>
 			<action>'$script' func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
 			<action type="enable">BUTTONAENDERN'$tb'</action>
 		</tree>
@@ -190,9 +184,10 @@ function gui_tb_get_dialog () {
 			</hbox>
 			<comboboxentry auto-refresh="true">
 				<variable>CBOXWHERE'$tb'</variable>
-				'$(gui_tb_get_default $dfltwhere)'
-				<input>'$script' func sql_get_where $CBOXENTRY'$tb' $CBOXDBSEL'$tb'</input>
+				'$(gui_tb_get_default  "$dfltwhere ")'
+				<input>'$script' func sql_get_where $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</input>
 				<action signal="activate" type="refresh">TREE'$tb'</action>
+				<action signal="activate" type="refresh">CBOXWHERE'$tb'</action>
 			</comboboxentry>
 		</frame>
 		<hbox>
@@ -218,55 +213,58 @@ function gui_tb_get_dialog () {
 		</hbox>
 	</vbox>'
 }
-function yesno () {
-	if [ "$#" -lt "1" ];then set -- "are you sure ?" ;fi
-	export YESNO='
-	<vbox>
-		<text><label>'"$@"'</label></text>
-		<hbox><button ok></button><button cancel></button></hbox>
-	</vbox>'    
-	gtkdialog -p YESNO > "$tmpf"
-	while read -r line;do
-		log yesno  $line
-		if [ "$line" == 'EXIT="OK"' ];then return 0 ;fi
-	done < "$tmpf"
-	return 1
-}
 function setmsg () {
-	log setmsg $*
-	case "$1" in
-		"-w"|"--warning") 			type="--warning"			;;
-		"-e"|"--error")   			type="--error"			;;
-		"-i"|"--info")    			type="--info"  			;;
-		"-n"|"--notification")    	type="--notification"	;;
-		*)							type="--notification"
-	esac
-	zenity $type --text="$*" 
+	parm="--notification";text=""
+	while [ "$#" -gt "0" ];do
+		case "$1" in
+		"--width"*)				parm="$parm ""$1"		;;
+		"-w"|"--warning") 		parm="--warning"		;;
+		"-e"|"--error")   		parm="--error"			;;
+		"-i"|"--info")    		parm="--info" 		 	;;
+		"-n"|"--notification")  parm="--notification"	;;
+		"-q"|"--question")	    parm="--question"		;;
+		"-*" )	   				parm="$parm ""$1"		;;
+		*)						text="$text ""$1"		;;
+		esac
+		shift
+	done
+	if [ "$text" != "" ];then text="--text='$text'" ;fi
+	eval 'zenity' $parm $text 
+	return $?
 }
 function getdbname () { echo "$*" | tr -d '/.'; }
-function setconfig () {
-	label=$1;shift;db=$1;shift;tb=$1;shift;where=$*
-	log $label $db $tb $where
-	return
+function setconfig_file () {
 	field="$1";shift;value="$1";shift;append="$1";shift;comment="$*"
-	if [ "$field" = "dflttable" ]; then
-		eval 'dflttb=$'$(getdbname $value)
-		comment="defaulttable $value";field=$(getdbname $value);value=$append;append="-"
-	fi
-	line="$field=\"$value\" # $comment"
-	if [ "$append" = "+" ];then echo "$line" >> "$x_configfile"  ;return  ;fi
-	grep "$comment" $x_configfile > /dev/null;
-	status=$?
-	if [ "$status" -gt "0" ];then echo "$line" >> "$x_configfile"  ;return  ;fi
+	line=$(printf "%-80s $s" "$field=\"$value\"" "# $comment")
 	grep "$line" $x_configfile > /dev/null;
 	status=$?
 	if [ "$status" = "0" ];then return  ;fi
+	if [ "$append" = "+" ];then echo "$line" >> "$x_configfile"  ;return  ;fi
 	cp -f "$x_configfile" "$path/tmp/configrc"  
-	grep -v "$comment" "$path/tmp/configrc" > "$x_configfile"
-	echo "$field=\"$value\" # $comment" >> "$x_configfile"
+	grep -v "# $comment" "$x_configfile" > "$path/tmp/configrc" 
+	echo "$line" >> "$path/tmp/configrc" 
+	sort -u "$path/tmp/configrc" > "$x_configfile"
+	return
+	cp -f "$x_configfile" "$path/tmp/configrc"  
+	grep -v "# $comment" "$path/tmp/configrc" > "$x_configfile"
+	echo "$line" >> "$x_configfile"
+}
+function setconfig () {
+	label=$1;shift;db=$1;shift;tb=$1;shift;where="$*"
+	if 		[ "$label" =  "tabel" ]; then
+			setconfig_file "dfltdb" "$db" "-" "default-datenbank fuer dbselect (label=tabel)"
+			field=$(getdbname $db)
+	fi
+	if 		[ "$label" != "$tb" ]; then
+			setconfig_file "$(getdbname $db)dflttb$label"    "$tb"    "-" "default-tabelle fuer tbselect (label=$label)"
+	fi
+	if 		[ "$where" = "" ];then return;fi
+	setconfig_file "$(getdbname $db)dfltwhere$tb" "$where" "-" "default-where fuer $tb (label=$label)"
+	setconfig_file "dummy" "$where" "+" "$db $tb"
 }
 function sql_get_where () {
-	return
+	cmd="grep \"^dummy=\" $x_configfile | grep \"# $1 $2\" | cut -d '\"' -f2"
+	bash -c "$cmd"
 }
 function sql_rc_read () {
 	log debug $@
@@ -284,7 +282,9 @@ function sql_rc_read () {
 }
 function x_get_tables () {
 	log $*
-	if [ "$#" -lt "2" ];then setmsg "Reiter $1\nBitte eine sqlite Datenbank auswaehlen" ;return ;fi
+#	setmsg -i "x_get_tables #$*#"  
+ 	if [ "$1" = "-" ];then  return ;fi
+#	if [ "$1" = "-" ];then return ;fi
 	if [ -d "$1" ];then setmsg "$1 ist ein Ordner\nBitte sqlite_db ausaehlen" ;return ;fi
 	sql_execute "$1" '.tables' | fmt -w 2
 	if [ "$(<$efile)" != "" ];then return;fi  
@@ -352,7 +352,7 @@ function sql_rc_update_insert () {
 function sql_rc_delete () {
 	log debug $@
 	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1
-	yesno "$PRIMKEY=$id wirklich loeschen ?"
+	setmsg -z "$PRIMKEY=$id wirklich loeschen ?"
 	if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
 	erg=$(sql_execute $"$db" "delete from $tb where $PRIMKEY = $ID;")  
 	[ "$erg" == "" ] && erg="delete erfolgreich" && setmsg $erg
@@ -368,21 +368,25 @@ function sql_execute () {
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db" 2> $efile | tr -d '\r' 
 	error=$(<$efile)
-	if [ "$error" != "" ];then setmsg -e "sql_execute $error" $db "\n" $stmt;echo "";return 1;fi
+	if [ "$error" != "" ];then setmsg -e --width=400 "sql_execute $error" $db "\n" $stmt;echo "";return 1;fi
 }
 function sql_read_table ()  {
 	log $@
-	off=$1;shift;view="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
-	if [ "$db" = "" ];then setmsg -w "sql_read_table: keine datenbank uebergeben - $*" ;return  ;fi
+#	off=$1;shift;view="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
+	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
+	if [ "$label" = "$tb" ];then off="off" ;else off="on"  ;fi
+	if [ "$db" = "" ];then setmsg -w --width=400 " sql_read_table\n label $label\n bitte datenbank selektieren\n $*" ;return  ;fi
 	if [ "$tb" = "" ];then setmsg -w "sql_read_table: keine tabelle uebergeben - $*" ;return  ;fi
 	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $path/tmp/export_${tb}.txt  
-	setconfig "$view" "$db" "$tb" "$where" 
+	setconfig "$label" "$db" "$tb" "$where" 
 }
 function tb_create_dialog () {
 	log debug $@ 
 	local dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
-	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb) ;fi
-	if [ "$dfltdb"  = "" ]; then dfltdb="-" ;fi
+	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb)'dflttbtabel' ;fi
+	if [ "$dfltdb"  = "" ]; then dfltdb="-";fi
+	if [ "$dflttb"  = "" ]; then dflttb="-";fi
+#	setmsg -i "db $dfltdb tb $dflttb "
 	log debug "db" $dfltdb "tb" $dflttb 
  	local cfile="$path/tmp/cliste.txt";[ -f "$cfile" ] && rm "$cfile";db=""
  	notebook="" 
@@ -391,25 +395,28 @@ function tb_create_dialog () {
 			db=$1
 			if [ "$2" = "" ] || [ -f  "$2" ]; then 
 				dblabel=$(basename $db);tblabel=${dblabel%%\.*}
-				eval 'tb=$'$(getdbname $db)
+				eval 'tb=$'$(getdbname $db)'dflttb'
 				if [ "$tb" = "" ];then tb="-" ;fi
 				echo $tblabel $db $tb "false" "true" >> $cfile # gui without db selection
 				notebook="$notebook $tblabel";
 			fi	
 		elif [ "$1" = "--all" ];then
+		    set -x
 			x_get_tables "$db" > $tmpf 
 			while read -r line;do 
 				echo $line $db $line "false" "false" >> $cfile # gui without db,tb selection
 				notebook="$notebook $line"
-			done < $tmpf	 
+			done < $tmpf
+			setmsg -i "nach parm --all"	 
+			set +x
 		else 
 			echo "$1 $db $1 false false"  >> "$cfile"
 			notebook="$notebook $1"; 
 		fi
 	    shift		
 	done
-	if [ "$notable" != "$true" ];then 
-		echo "tabel $dfltdb $dflttb true true" >> "$cfile"
+ 	if [ "$notable" != "$true" ];then 
+ 		echo "tabel $dfltdb $dflttb true true" >> "$cfile"
 		if [ "$notebook" != "" ];then notebook="$notebook tabel";fi
 	fi
 	if [ "$notebook" != "" ];then 
@@ -419,12 +426,12 @@ function tb_create_dialog () {
 	while read -r line;do 
 		set -- $line
 		if [ "$3" != "-" ]; then
-			eval 'where=$'$(getdbname $2)$1
+			eval 'where=$'$(getdbname $2)'dfltwhere'$3
 		else
 			where="-"
 		fi
 	    if [ "$where" = "" ];then where="-" ;fi	
-		printf "%-10s %-40s %-15s %s %s %s\n" $1 $2 $3 $4 $5 "$where" >> $tmpf
+		printf "%-10s %-40s %-15s %5s %5s %s\n" $1 $2 $3 $4 $5 "$where" >> $tmpf
 		gui_tb_get_dialog $1 $2 $3 $4 $5 "$where" >> $dfile
 	done < $cfile
 	if [ "$notebook" != "" ];then echo "</notebook>" >> $dfile;fi
