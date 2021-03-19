@@ -149,10 +149,10 @@ function gui_tb_get_default () {
 function gui_tb_get_dialog () {
 	log debug $@
 	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*"  
-    if [ "$dfltdb" = "-" ];then str="";else str="$dfltdb";fi;eval 'export CBOXDBSEL'$tb'='$str 
- 	if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
- 	if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
-	if [ "$dfltwhere" = "-" ];then str="";else str="$dfltwhere";fi;eval 'export CBOXWHERE'$tb'="'$str'"' 
+    #~ if [ "$dfltdb" = "-" ];then str="";else str="$dfltdb";fi;eval 'export CBOXDBSEL'$tb'='$str 
+ 	#~ if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
+ 	#~ if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
+	#~ if [ "$dfltwhere" = "-" ];then str="";else str="$dfltwhere";fi;eval 'export CBOXWHERE'$tb'="'$str'"' 
 	if [ "$tb" = "$dflttb" ]; then
 		IFS="@";marray=($(tb_meta_info "$dflttb" "$dfltdb"));unset IFS
 		pk="${marray[0]}"
@@ -229,7 +229,8 @@ function gui_tb_get_dialog () {
 			</button>
 			<button cancel></button>
 		</hbox>
-	</vbox>'
+	 </vbox>
+	 '
 }
 function setmsg () {
 	parm="--notification";text=""
@@ -300,10 +301,9 @@ function sql_rc_read () {
     cp -f "$valuefile" "$valuefile.bak"
 }
 function x_get_tables () {
-	log $*
-#	setmsg -i "x_get_tables #$*#"  
+	log debug $*
+	setmsg -i -d "x_get_tables #$*#"  
  	if [ "$1" = "-" ];then  return ;fi
-#	if [ "$1" = "-" ];then return ;fi
 	if [ -d "$1" ];then setmsg "$1 ist ein Ordner\nBitte sqlite_db ausaehlen" ;return ;fi
 	sql_execute "$1" '.tables' | fmt -w 2
 	if [ "$(<$efile)" != "" ];then return;fi  
@@ -402,19 +402,63 @@ function sql_read_table ()  {
 function tb_create_dialog_nb () {
 	tb=$3;where="-"
 	if [ "$2" != "-" ]; then
-		if [ "$tb"  = "-" ]; then tb=$(x_get_tables $2 "batch"| head -n1) ;fi
-		if [ "$tb" != "" ]; then
-			eval 'where=$'$(getdbname $2)'dfltwhere'$1$3
+		eval 'dflttb=$'$(getdbname $2)'dflttb'$1 
+		if [ "$tb"      = "-" ]; then tb=$(x_get_tables $2 "batch"| head -n1) ;fi
+		if [ "$dflttb" != ""  ]; then
+			eval 'where=$'$(getdbname $2)'dfltwhere'$1$dflttb
 		else
 			tb="-"
 		fi  
 	fi
-	if [ "$2"     != "-" ];then log 'export CBOXDBSEL'$1'='$2;fi
-	if [ "$3"     != "-" ];then log 'export CBOXENTRY'$1'='$tb;fi 
-	if [ "$where" != "-" ];then log 'export CBOXWHERE'$1'="'$where'"';fi
-	echo "$1" "$2" "$tb" "$4" "$5" "$where"
+	if [ "$2"     != "-" ];then eval 'export CBOXDBSEL'$1'='$2 ;fi
+	if [ "$dflttb" != "" ];then eval 'export CBOXENTRY'$1'='$dflttb ;fi 
+	if [ "$where"  != "" ];then eval 'export CBOXWHERE'$1'="'$where'"';fi
+	log debug $(export -p | grep "CBOX")
+	erg="$1 $2 $tb $4 $5 $where"
+	notebook=$notebook" $1" 
 }
 function tb_create_dialog () {
+	log debug $@ 
+	notebook="" 
+	dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
+	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb)'dflttbselectDB' ;fi
+	if [ "$dfltdb"  = "" ]; then dfltdb="-";fi
+	if [ "$dflttb"  = "" ]; then dflttb="-";fi
+ 	cfile="$path/tmp/labelliste.txt";[ -f "$cfile" ] && rm "$cfile";db=""
+	notebook="";zn=-1 
+	while [ "$#" -gt "0" ];do
+		if   [ -f  "$1" ];then
+			db=$1
+			if [ "$2" = "" ] || [ -f  "$2" ]; then 
+				dblabel=$(basename $db);tblabel=${dblabel%%\.*}
+				eval 'tb=$'$(getdbname $db)'dflttb'
+				if [ "$tb" = "" ];then tb="-" ;fi
+				tb_create_dialog_nb "$tblabel" $db $tb "false" "true";zn=$((zn+1));anb[$zn]="$erg"
+			fi	
+		elif [ "$1" = "--all" ];then
+			x_get_tables "$db" > $tmpf 
+			while read -r line;do 
+				tb_create_dialog_nb $line $db $line "false" "false";zn=$((zn+1));anb[$zn]="$erg"
+			done < $tmpf
+		else 
+			tb_create_dialog_nb "$1" "$db" "$1" "false" "false";zn=$((zn+1));anb[$zn]="$erg"
+		fi
+	    shift		
+	done
+ 	if [ "$notable" != "$true" ];then 
+ 		tb_create_dialog_nb "selectDB" "$dfltdb" "$dflttb" "true" "true";zn=$((zn+1));anb[$zn]="$erg" 
+	fi
+	echo "<window title=\"Uwes sqlite dbms\">" > $dfile
+	echo "<notebook show-tabs=\"$visible\" space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" >> $dfile
+	for arg in "${anb[@]}" ;do
+		set -- $arg 
+		log debug $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
+		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
+	done
+	echo "</notebook></window>" >> $dfile 
+	gtkdialog  -f "$dfile"
+}
+function tb_create_dialog-alt () {
 	log debug $@ 
 	notebook="" 
 	dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
@@ -449,7 +493,7 @@ function tb_create_dialog () {
 	echo "<notebook show-tabs=\"$visible\" space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" > $dfile
 	for arg in "${anb[@]}" ;do
 		set -- $arg 
-		log $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
+		log debug $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
 		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
 	done
 	echo "</notebook>" >> $dfile 
