@@ -140,7 +140,7 @@ function log() {
 	    elif [ "${!i}" == "stop" ];        then    stopit=1 
 	    elif [ "${!i}" == "ende" ];        then    stopit=1 
 	    elif [ "${!i}" == "end" ];         then    stopit=1 
-	    elif [ "${!i}" == "tlog" ];        then    shift;tlog $logfile 
+	    elif [ "${!i}" == "tlog" ];        then    tlog $logfile 
 	    else                                       args="$args${!i} " 
 	    fi
 	done
@@ -150,9 +150,8 @@ function log() {
 function func_log() {                
     if [ "$debug"  -gt  0 ] && [ "$debug_on"  -lt  1 ]; then return;fi
     if [ "$verbose_on" -gt  0 ]; then 
-
         funcname="${FUNCNAME[2]}";if [ "$funcname" == "" ];then funcname="bash";fi
-        funcname=$(left "${funcname}" 10 )
+        funcname=$(left "${funcname}" 20 )
 		set -- $(date "+%Y-%m-%d %H:%M:%S")" ${funcname}" "$@"
 	fi 
     if [ "$log_on" -gt  0 ];     then

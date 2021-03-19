@@ -2,14 +2,40 @@
 #!/bin/bash -e
 #!/usr/local/bin/gtkdialog -e
 # author uwe suelzle
-# created 202?-??-??
-# function: 
+# created 2021-03-16
+# version 1.0.0
+# function: dbms for sqlite
 #
  source /home/uwe/my_scripts/my_functions.sh
  trap axit EXIT
 function axit() {
 	retcode=0 
   	if [ "$cmd" = "" ]; then log stop;fi
+}
+function amain () {
+	log file   
+#	log file tlog verbose_on debug_on  
+	pparms=$*
+	refresh=$false;notable=$false;visible="true";parm=""
+	while [ "$#" -gt 0 ];do
+		case "$1" in
+	        "--tlog"|-t|--show-log-with-tail)  			log tlog ;;
+	        "--debug"|-d)  				                log debug_on ;;
+	        "--version"|-v)  				            echo "version 1.0.0" ;;
+	        "--vb"|--verbose|--verbose-log)  			log verbose_on ;;
+	        "--func"|-f|--execute-function)  			shift;cmd="nostop";log debug $pparms;$*;return ;;
+	        "--notable"|--no-tab-with-db-selection)		notable=$true ;;
+	        "--nolabel"|--no-notebook-label)			nolabel=$true ;;
+	        "--help"|-h)								func_help $FUNCNAME;echo -e "\n     usage dbname [table --all]]" ;return;;
+	        "--all"|--tab-each-table)					parm="$parm $1";;
+	        -*)   										func_help $FUNCNAME;return;;
+	        *)    										parm="$parm $1";;
+	    esac
+	    shift
+	done
+    log start
+    log debug $pparms
+	tb_create_dialog   $parm	
 } 
  	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
 	tpath="$path/tmp"  
@@ -33,7 +59,7 @@ function gui_rc_entrys_hbox () {
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
 		echo '		<hbox>'  
 		echo '			<text width-chars="20" justify="3"><label>'" "${name[$ia]}'</label></text>'  
-		echo '			<entry width_chars="30"><variable>entry'$ia'</variable><input>'$script' func tb_get_meta_val '$ia'</input></entry>' 
+		echo '			<entry width_chars="30"><variable>entry'$ia'</variable><input>'$script' --func tb_get_meta_val '$ia'</input></entry>' 
 		echo '			<text width-chars="25" justify="3"><label>'${meta[$ia]}'</label></text>'  
 		echo '		</hbox>' 
 	done
@@ -66,7 +92,7 @@ function gui_rc_get_dialog () {
 	<vbox>
 		<hbox>
 			<text width-chars="20" justify="3"><label>'"$PRIMKEY"' (PK)</label></text>
-			<entry width_chars="30"><variable>entryp</variable><input>'$script' func tb_get_meta_val '"$ID"'</input></entry>
+			<entry width_chars="30"><variable>entryp</variable><input>'$script' --func tb_get_meta_val '"$ID"'</input></entry>
 			<text width-chars="25" justify="3"><label>type,null,default,primkey</label></text>
 		</hbox>
 	</vbox>
@@ -77,32 +103,32 @@ function gui_rc_get_dialog () {
 	</frame>
 	<hbox>
 		<button><label>back</label>
-			<action>'$script' func sql_rc_read '$db' '$tb' lt '$PRIMKEY' $entryp</action>
+			<action>'$script' --func sql_rc_read '$db' '$tb' lt '$PRIMKEY' $entryp</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>next</label>
-			<action>'$script' func sql_rc_read '$db' '$tb' gt '$PRIMKEY' $entryp</action>
+			<action>'$script' --func sql_rc_read '$db' '$tb' gt '$PRIMKEY' $entryp</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>read</label>
-			<action>'$script' func sql_rc_read '$db' '$tb' eq '$PRIMKEY' $entryp</action>
+			<action>'$script' --func sql_rc_read '$db' '$tb' eq '$PRIMKEY' $entryp</action>
 			<action type="enable">BUTTONAENDERN</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>insert</label>
-			<action>'$script' func sql_rc_update_insert '$db' '$tb' insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
+			<action>'$script' --func sql_rc_update_insert '$db' '$tb' insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>update</label><variable>BUTTONUPDATE</variable>
-			<action>'$script' func sql_rc_update_insert '$db' '$tb' update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
+			<action>'$script' --func sql_rc_update_insert '$db' '$tb' update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
 		</button>
 		<button><label>delete</label>
-			<action>'$script' func sql_rc_delete '$db' '$tb' '$PRIMKEY' $entryp</action>
+			<action>'$script' --func sql_rc_delete '$db' '$tb' '$PRIMKEY' $entryp</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>clear</label>
 			<action type="enable">BUTTONUPDATE</action>
-			<action>'$script' func sql_rc_clear '"$(gui_rc_entrys_variable_list $PRIMKEY $ID $TNAMES $TLINE)"'</action>
+			<action>'$script' --func sql_rc_clear '"$(gui_rc_entrys_variable_list $PRIMKEY $ID $TNAMES $TLINE)"'</action>
 			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
 		</button>
 		<button><label>refresh</label>
@@ -118,23 +144,19 @@ function gui_rc_get_dialog () {
 function gui_tb_get_default () {
 	log debug "$*";str=$(echo "$*" | tr -d ' "-') 
 	if [ "$str" = "" ] ;then echo "";return  ;fi
-	if [ "$#" -gt "1" ];then 
-		echo "<default>\"$*\"</default>"
-	else 
-		echo "<default>$*</default>"
-	fi
+	echo "<default>\"$*\"</default>"
 }
 function gui_tb_get_dialog () {
 	log debug $@
-	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*" 
-	if [ "$dfltdb" = "-" ];then str="";else str="$dfltdb";fi;eval 'export CBOXDBSEL'$tb'='$str 
-	if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
-	if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
+	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*"  
+    if [ "$dfltdb" = "-" ];then str="";else str="$dfltdb";fi;eval 'export CBOXDBSEL'$tb'='$str 
+ 	if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
+ 	if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
 	if [ "$dfltwhere" = "-" ];then str="";else str="$dfltwhere";fi;eval 'export CBOXWHERE'$tb'="'$str'"' 
 	if [ "$tb" = "$dflttb" ]; then
 		IFS="@";marray=($(tb_meta_info "$dflttb" "$dfltdb"));unset IFS
 		pk="${marray[0]}"
-		label=$(echo "${marray[2]}"| tr ',' '|')
+		label=$(echo "${marray[2]}"| tr ',_' '|-')
 		visibleHD="true";off="on"
 	else
 	    if [ "$dfltlabel" == "" ]; then
@@ -144,18 +166,14 @@ function gui_tb_get_dialog () {
 		label=$dfltlabel
 		visibleHD="false";off="off"
 	fi
-#	if [ "$dflttb" != "-" ];
-#		then off="off" #;visibleTB="true" ;visibleDB="false"
-#		else off="on"  #;visibleTB="false";visibleDB="true"
-#	fi  
 	echo  '
 	<vbox>
 		<tree headers_visible="'$visibleHD'" autorefresh="true" hover_selection="false" hover_expand="true" exported_column="0">
 			<label>'"$label"'</label>
 			<height>500</height><width>600</width> 
 			<variable>TREE'$tb'</variable>
-			<input>'$script' func sql_read_table '$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' "$CBOXWHERE'$tb'"</input>
-			<action>'$script' func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
+			<input>'$script' --func sql_read_table '$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' "$CBOXWHERE'$tb'"</input>
+			<action>'$script' --func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
 			<action type="enable">BUTTONAENDERN'$tb'</action>
 		</tree>
 		<frame click = selection >
@@ -176,7 +194,7 @@ function gui_tb_get_dialog () {
 					<variable>CBOXENTRY'$tb'</variable>
 					'$(gui_tb_get_default $dflttb)'
 					<sensitive>true</sensitive>
-					<input>'$script' func x_get_tables $CBOXDBSEL'$tb' '$tb'</input>
+					<input>'$script' --func x_get_tables $CBOXDBSEL'$tb' '$tb'</input>
 					<action type="clear">TREE'$tb'</action>
 					<action type="refresh">CBOXWHERE'$tb'</action>
 					<action type="refresh">TREE'$tb'</action>
@@ -185,7 +203,7 @@ function gui_tb_get_dialog () {
 			<comboboxentry auto-refresh="true">
 				<variable>CBOXWHERE'$tb'</variable>
 				'$(gui_tb_get_default  "$dfltwhere ")'
-				<input>'$script' func sql_get_where $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</input>
+				<input>'$script' --func sql_get_where $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</input>
 				<action signal="activate" type="refresh">TREE'$tb'</action>
 				<action signal="activate" type="refresh">CBOXWHERE'$tb'</action>
 			</comboboxentry>
@@ -195,13 +213,13 @@ function gui_tb_get_dialog () {
 				<label>insert</label>
 				<variable>BUTTONINSERT'$tb'</variable>
 				<sensitive>true</sensitive> 
-				<action>'$script' func sql_rc_ctrl insert $CBOXENTRY'$tb' $CBOXDBSEL'$tb'</action>
+				<action>'$script' --func sql_rc_ctrl insert $CBOXENTRY'$tb' $CBOXDBSEL'$tb'</action>
 			</button>
 			<button visible="false">
 				<label>aendern</label>
 				<variable>BUTTONAENDERN'$tb'</variable>
 				<sensitive>false</sensitive> 
-				<action>$(which rowchange) $TREE'$tb' $CBOXENTRY'$tb' $CBOXDBSEL'$tb'</action>
+				<action>'$script' --func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
 			</button>
 			<button>
 				<label>read</label>
@@ -223,6 +241,7 @@ function setmsg () {
 		"-i"|"--info")    		parm="--info" 		 	;;
 		"-n"|"--notification")  parm="--notification"	;;
 		"-q"|"--question")	    parm="--question"		;;
+		"-d"|"--debug")	        if [ "$debug_on" = "0" ];then  return  ;fi		;;
 		"-*" )	   				parm="$parm ""$1"		;;
 		*)						text="$text ""$1"		;;
 		esac
@@ -251,15 +270,15 @@ function setconfig_file () {
 }
 function setconfig () {
 	label=$1;shift;db=$1;shift;tb=$1;shift;where="$*"
-	if 		[ "$label" =  "tabel" ]; then
-			setconfig_file "dfltdb" "$db" "-" "default-datenbank fuer dbselect (label=tabel)"
+	if 		[ "$label" =  "selectDB" ]; then
+			setconfig_file "dfltdb" "$db" "-" "default-datenbank fuer dbselect (label=selectDB)"
 			field=$(getdbname $db)
 	fi
 	if 		[ "$label" != "$tb" ]; then
 			setconfig_file "$(getdbname $db)dflttb$label"    "$tb"    "-" "default-tabelle fuer tbselect (label=$label)"
 	fi
 	if 		[ "$where" = "" ];then return;fi
-	setconfig_file "$(getdbname $db)dfltwhere$tb" "$where" "-" "default-where fuer $tb (label=$label)"
+	setconfig_file "$(getdbname $db)dfltwhere$label$tb" "$where" "-" "default-where fuer $tb (label=$label)"
 	setconfig_file "dummy" "$where" "+" "$db $tb"
 }
 function sql_get_where () {
@@ -376,20 +395,34 @@ function sql_read_table ()  {
 	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
 	if [ "$label" = "$tb" ];then off="off" ;else off="on"  ;fi
 	if [ "$db" = "" ];then setmsg -w --width=400 " sql_read_table\n label $label\n bitte datenbank selektieren\n $*" ;return  ;fi
-	if [ "$tb" = "" ];then setmsg -w "sql_read_table: keine tabelle uebergeben - $*" ;return  ;fi
+	if [ "$tb" = "" ];then setmsg -w --width=400 " sql_read_table\n label $label\n keine tabelle uebergeben\n $*" ;return  ;fi
 	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $path/tmp/export_${tb}.txt  
 	setconfig "$label" "$db" "$tb" "$where" 
 }
+function tb_create_dialog_nb () {
+	tb=$3;where="-"
+	if [ "$2" != "-" ]; then
+		if [ "$tb"  = "-" ]; then tb=$(x_get_tables $2 "batch"| head -n1) ;fi
+		if [ "$tb" != "" ]; then
+			eval 'where=$'$(getdbname $2)'dfltwhere'$1$3
+		else
+			tb="-"
+		fi  
+	fi
+	if [ "$2"     != "-" ];then log 'export CBOXDBSEL'$1'='$2;fi
+	if [ "$3"     != "-" ];then log 'export CBOXENTRY'$1'='$tb;fi 
+	if [ "$where" != "-" ];then log 'export CBOXWHERE'$1'="'$where'"';fi
+	echo "$1" "$2" "$tb" "$4" "$5" "$where"
+}
 function tb_create_dialog () {
 	log debug $@ 
-	local dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
-	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb)'dflttbtabel' ;fi
+	notebook="" 
+	dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
+	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb)'dflttbselectDB' ;fi
 	if [ "$dfltdb"  = "" ]; then dfltdb="-";fi
 	if [ "$dflttb"  = "" ]; then dflttb="-";fi
-#	setmsg -i "db $dfltdb tb $dflttb "
-	log debug "db" $dfltdb "tb" $dflttb 
- 	local cfile="$path/tmp/cliste.txt";[ -f "$cfile" ] && rm "$cfile";db=""
- 	notebook="" 
+ 	cfile="$path/tmp/labelliste.txt";[ -f "$cfile" ] && rm "$cfile";db=""
+	notebook="";zn=-1 
 	while [ "$#" -gt "0" ];do
 		if   [ -f  "$1" ];then
 			db=$1
@@ -397,44 +430,29 @@ function tb_create_dialog () {
 				dblabel=$(basename $db);tblabel=${dblabel%%\.*}
 				eval 'tb=$'$(getdbname $db)'dflttb'
 				if [ "$tb" = "" ];then tb="-" ;fi
-				echo $tblabel $db $tb "false" "true" >> $cfile # gui without db selection
-				notebook="$notebook $tblabel";
+				zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb "$tblabel" $db $tb "false" "true");notebook=$notebook" $tblabel" 
 			fi	
 		elif [ "$1" = "--all" ];then
-		    set -x
 			x_get_tables "$db" > $tmpf 
 			while read -r line;do 
-				echo $line $db $line "false" "false" >> $cfile # gui without db,tb selection
-				notebook="$notebook $line"
+				zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb $line $db $line "false" "false");notebook=$notebook" $line"
 			done < $tmpf
-			setmsg -i "nach parm --all"	 
-			set +x
 		else 
-			echo "$1 $db $1 false false"  >> "$cfile"
-			notebook="$notebook $1"; 
+			zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb "$1" "$db" "$1" "false" "false");notebook=$notebook" $1" 
 		fi
 	    shift		
 	done
  	if [ "$notable" != "$true" ];then 
- 		echo "tabel $dfltdb $dflttb true true" >> "$cfile"
-		if [ "$notebook" != "" ];then notebook="$notebook tabel";fi
+ 		zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb "selectDB" "$dfltdb" "$dflttb" "true" "true");notebook=$notebook" selectDB" 
 	fi
-	if [ "$notebook" != "" ];then 
-		echo "<notebook space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" > $dfile
-	fi
- 	[ -f $tmpf ] && rm $tmpf;where="-"
-	while read -r line;do 
-		set -- $line
-		if [ "$3" != "-" ]; then
-			eval 'where=$'$(getdbname $2)'dfltwhere'$3
-		else
-			where="-"
-		fi
-	    if [ "$where" = "" ];then where="-" ;fi	
-		printf "%-10s %-40s %-15s %5s %5s %s\n" $1 $2 $3 $4 $5 "$where" >> $tmpf
-		gui_tb_get_dialog $1 $2 $3 $4 $5 "$where" >> $dfile
-	done < $cfile
-	if [ "$notebook" != "" ];then echo "</notebook>" >> $dfile;fi
+	setmsg -i -d "nolabel $nolabel\n false $false"
+	echo "<notebook show-tabs=\"$visible\" space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" > $dfile
+	for arg in "${anb[@]}" ;do
+		set -- $arg 
+		log $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
+		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
+	done
+	echo "</notebook>" >> $dfile 
 	gtkdialog  -f "$dfile"
 }
 function tb_get_meta_val   () {
@@ -473,21 +491,5 @@ function tb_meta_info () {
 	done < $tableinfo
 	echo "$PRIMKEY@ID@$TNAME@$TTYPE@$TNOTN@$TDFLT@$TPKEY@$TLINE@$TSELECT"  
 }
-function zz () {
-	return
-}
-	if [ "$1" = "func" ];then shift;log file tlog debug;cmd="--";$*;exit ;fi 
-	log file tlog verbose_on debug_on
-	if [ "$1" = "sql_rc_ctrl" ];then shift;sql_rc_ctrl $@;cmd="--";exit ;fi 
-	log start 
-	refresh=$false;notable=$false;parm=""
-	while [ "$#" -gt 0 ];do
-        if   [ "$1" == "--refresh" ]; then refresh=$true 
-        elif [ "$1" == "--notable" ]; then notable=$true 
-		else parm="$parm $1"
-		fi
-		shift
-	done
-	if [ ! -f "$path/tmp/refreshed.txt" ];then refresh=$true;touch "$path/tmp/refreshed.txt" ;fi
-	tb_create_dialog $parm
-
+function zz () { return; } 
+	amain $*
