@@ -52,16 +52,37 @@ function amain () {
 	tmpf="$path/tmp/dialogtmp.txt"
 	tableinfo="$path/tmp/tableinfo.txt"  
 	valuefile="$path/tmp/value.txt"
+function gui_rc_entrys_hbox_extra () {
+	db="$1";shift;tb="$1";shift;field="$1";shift;nr="$1";shift;meta="$1";shift;cmd=$*
+#	setmsg -i -d --width=600 "extra befehl field $field nr $nr\n cmd $cmd"
+	echo  ' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="true">'
+	echo  ' 				<variable>entry'$nr$nr'</variable>'
+	echo  ' 				<sensitive>true</sensitive>'
+    echo  ' 			    <input>/home/uwe/my_scripts/my_squirrel_all.sh --func sql_execute '$db '"'$cmd'"</input>'
+    echo  '                 <action>'$script' --func tb_set_meta_val '$nr' $entry'$nr$nr'</action>'
+    echo  '                 <action type="refresh">entry'$nr'</action>'
+    echo  '             </comboboxtext>'
+#	echo  ' 			<text width-chars="25" justify="3"><label>'${meta[$ia]}'</label></text>'   
+}
 function gui_rc_entrys_hbox () {
-	log $@
-	PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+	log debug $@
+	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
 	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
-		echo '		<hbox>'  
-		echo '			<text width-chars="20" justify="3"><label>'" "${name[$ia]}'</label></text>'  
-		echo '			<entry width_chars="30"><variable>entry'$ia'</variable><input>'$script' --func tb_get_meta_val '$ia'</input></entry>' 
-		echo '			<text width-chars="25" justify="3"><label>'${meta[$ia]}'</label></text>'  
-		echo '		</hbox>' 
+		eval 'cmdextra=$'$(getdbname $db)$tb${name[$ia]}
+		if [ "$cmdextra" = "" ]; then length="20"; else length="19";fi
+		echo    '	<hbox>'   
+		echo    ' 			<text width-chars="'$length'" justify="3"><label>'" "${name[$ia]}'</label></text>' 
+		echo    ' 			<entry width_chars="30">'  
+		echo    ' 				<variable>entry'$ia'</variable>' 
+		echo    ' 				<input>'$script' --func tb_get_meta_val '$ia'</input>'  
+		echo    ' 			</entry>' 
+		if [ "$cmdextra" = "" ]; then
+		   echo  ' 			<text width-chars="25" justify="3"><label>'${meta[$ia]}'</label></text>'   
+		else
+		   gui_rc_entrys_hbox_extra "$db" "$tb" "${name[$ia]}" "$ia" "${meta[$ia]}" "$cmdextra"	
+		fi
+        echo    '	</hbox>' 
 	done
 }
 function gui_rc_entrys_action_refresh () {
@@ -85,61 +106,63 @@ function gui_rc_entrys_variable_list () {
 }
 function gui_rc_get_dialog () {
 	log debug $@
-	row="$1";shift;tb="$1";shift;db="$1";shift;PRIMKEY="$1";shift;ID="$1";shift
+	db="$1";shift;tb="$1";shift;row="$1";shift;PRIMKEY="$1";shift;ID="$1";shift
 	TNAMES="$1";shift;TLINE="$1";shift;TNOTN="$1";shift;TSELECT="$1"
-	echo '
-<vbox>
-	<vbox>
-		<hbox>
-			<text width-chars="20" justify="3"><label>'"$PRIMKEY"' (PK)</label></text>
-			<entry width_chars="30"><variable>entryp</variable><input>'$script' --func tb_get_meta_val '"$ID"'</input></entry>
-			<text width-chars="25" justify="3"><label>type,null,default,primkey</label></text>
-		</hbox>
-	</vbox>
-	<frame>
-		<vbox>
-			'$(gui_rc_entrys_hbox $PRIMKEY $ID $TNAMES $TLINE)'
-		</vbox>
-	</frame>
-	<hbox>
-		<button><label>back</label>
-			<action>'$script' --func sql_rc_read '$db' '$tb' lt '$PRIMKEY' $entryp</action>
-			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button><label>next</label>
-			<action>'$script' --func sql_rc_read '$db' '$tb' gt '$PRIMKEY' $entryp</action>
-			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button><label>read</label>
-			<action>'$script' --func sql_rc_read '$db' '$tb' eq '$PRIMKEY' $entryp</action>
-			<action type="enable">BUTTONAENDERN</action>
-			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button><label>insert</label>
-			<action>'$script' --func sql_rc_update_insert '$db' '$tb' insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
-			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button><label>update</label><variable>BUTTONUPDATE</variable>
-			<action>'$script' --func sql_rc_update_insert '$db' '$tb' update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>
-		</button>
-		<button><label>delete</label>
-			<action>'$script' --func sql_rc_delete '$db' '$tb' '$PRIMKEY' $entryp</action>
-			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button><label>clear</label>
-			<action type="enable">BUTTONUPDATE</action>
-			<action>'$script' --func sql_rc_clear '"$(gui_rc_entrys_variable_list $PRIMKEY $ID $TNAMES $TLINE)"'</action>
-			'"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button><label>refresh</label>
-			<variable>BUTTONREFRESH</variable>
-			<action type="enable">BUTTONAENDERN</action>
-			<action>cp -f '"$valuefile.bak" "$valuefile"'</action>
-			 '"$(gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE)"'
-		</button>
-		<button ok></button><button cancel></button>
-	</hbox>
-</vbox>' > "$row_change_xml"	
+	echo '<vbox>'
+	echo '	<vbox>'
+	echo '		<hbox>'
+	echo '			<text width-chars="20" justify="3"><label>'"$PRIMKEY"' (PK)</label></text>'
+	echo '			<entry width_chars="30">'
+	echo '				<variable>entryp</variable>'
+	echo '				<input>'$script' --func tb_get_meta_val '"$ID"'</input>'
+	echo '			</entry>'
+	echo '			<text width-chars="25" justify="3"><label>type,null,default,primkey</label></text>'
+	echo '		</hbox>'
+	echo '	</vbox>'
+	echo '  <frame>'
+	echo '  <vbox>'
+			   gui_rc_entrys_hbox $db $tb $PRIMKEY $ID $TNAMES $TLINE
+	echo '	</vbox>'
+	echo '  </frame>'
+	echo '	<hbox>'
+	echo '		<button><label>back</label>'
+	echo '			<action>'$script' --func sql_rc_read '$db' '$tb' lt '$PRIMKEY' $entryp</action>'
+			        gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE
+	echo '		</button>'
+	echo '		<button><label>next</label>'
+	echo '			<action>'$script' --func sql_rc_read '$db' '$tb' gt '$PRIMKEY' $entryp</action>'
+			        gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE
+    echo '		</button>'
+	echo '		<button><label>read</label>'
+	echo '			<action>'$script' --func sql_rc_read '$db' '$tb' eq '$PRIMKEY' $entryp</action>'
+	echo '			<action type="enable">BUTTONAENDERN</action>'
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+	echo '		</button>'
+	echo '		<button><label>insert</label>'
+	echo '			<action>'$script' --func sql_rc_update_insert '$db' '$tb' insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>'
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+	echo '		</button>'
+	echo '		<button><label>update</label><variable>BUTTONUPDATE</variable>'
+	echo '			<action>'$script' --func sql_rc_update_insert '$db' '$tb' update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>'
+	echo '		</button>'
+	echo '		<button><label>delete</label>'
+	echo '			<action>'$script' --func sql_rc_delete '$db' '$tb' '$PRIMKEY' $entryp</action>'
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+	echo '		</button>'
+	echo '		<button><label>clear</label>'
+	echo '			<action type="enable">BUTTONUPDATE</action>'
+	echo '			<action>'$script' --func sql_rc_clear '"$(gui_rc_entrys_variable_list $PRIMKEY $ID $TNAMES $TLINE)"'</action>'
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+	echo '		</button>'
+	echo '		<button><label>refresh</label>'
+	echo '			<variable>BUTTONREFRESH</variable>'
+	echo '			<action type="enable">BUTTONAENDERN</action>'
+	echo '			<action>cp -f '"$valuefile.bak" "$valuefile"'</action>'
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+	echo '		</button>'
+	echo '		<button ok></button><button cancel></button>'
+	echo '	</hbox>'
+	echo '</vbox>' 
 }
 function gui_tb_get_default () {
 	log debug "$*";str=$(echo "$*" | tr -d ' "-') 
@@ -321,7 +344,7 @@ function sql_rc_ctrl () {
 		sql_rc_read $db $tb eq $PRIMKEY $row > "$valuefile"
 	fi
     row_change_xml="$path/tmp/change_row_${tb}.xml"
-    gui_rc_get_dialog $row $tb $db $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT 
+    gui_rc_get_dialog $db $tb $row $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT > "$row_change_xml"	
 	gtkdialog -f "$row_change_xml" & # 2> /dev/null  
 }
 function sql_rc_back () { sql_rc_read lt $@; }
@@ -498,6 +521,19 @@ function tb_create_dialog-alt () {
 	done
 	echo "</notebook>" >> $dfile 
 	gtkdialog  -f "$dfile"
+}
+function tb_set_meta_val   () {
+	set -x
+	nr=$1;shift;value=$*
+	cp -f "$valuefile" "$valuefile"".bak2"
+	i=-1
+	while read line;do
+		i=$((i+1))
+		if [ "$i" != "$nr" ];then echo $line;continue;fi  
+		echo "${line%=*} = ${value% *}"
+	done  < "$valuefile"".bak2" > "$valuefile"
+	set +x
+	setmsg -i --width=400 "$FUNCTION\nnr= $nr\nvalue=$value"
 }
 function tb_get_meta_val   () {
 	nr=$1  
