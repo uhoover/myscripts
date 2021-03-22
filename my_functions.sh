@@ -12,19 +12,49 @@
         declare -a SOURCELINE
         declare -t true=0
         declare -t false=1
-        declare -t TMPF="/tmp/tmpfile.csv"
+        declare -t TMPF="/tmp/tmpfile.txt"
         [ ! -d "$HOME/log" ] && mkdir "$HOME/log"
         declare -t SYSLOG="$HOME/log/syslog.log"
         declare -t log_on=1
         declare -t echo_on=0
         declare -t debug_on=0
 		declare -t verbose_on=0
+		declare -t sqlerror="/tmp/sqlerror.txt"
 		export MYPATH="$HOME/my_scripts"
 function func_help () {
     [ $# -gt 1 ] && echo "         Wert unzulaessig: $2"
     echo "         $1 -- usage:"
     type -a "$1" | grep -e '\"\-\-' | func_translate -i '|,",)' -o " , , "
     echo "         func_test for a short demonstration"
+}
+function func_setmsg () {
+	parm="--notification";text=""
+	while [ "$#" -gt "0" ];do
+		case "$1" in
+		"--width"*)				parm="$parm ""$1"		;;
+		"-w"|"--warning") 		parm="--warning"		;;
+		"-e"|"--error")   		parm="--error"			;;
+		"-i"|"--info")    		parm="--info" 		 	;;
+		"-n"|"--notification")  parm="--notification"	;;
+		"-q"|"--question")	    parm="--question"		;;
+		"-d"|"--debug")	        if [ "$debug_on" = "0" ];then  return  ;fi		;;
+		"-*" )	   				parm="$parm ""$1"		;;
+		*)						text="$text ""$1"		;;
+		esac
+		shift
+	done
+	if [ "$text" != "" ];then text="--text='$text'" ;fi
+	eval 'zenity' $parm $text 
+	return $?
+}
+function func_sql_execute () {
+	set -o noglob
+	if [ "$sqlerror" == "" ];then sqlerror="/tmp/sqlerror.txt";fi
+	local db="$1";shift;stmt="$@"
+	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror" | tr -d '\r'   
+	error=$(<"$sqlerror")
+	if [ "$error" != "" ];then setmsg -e --width=400 "sql_execute $error" $db "\n" $stmt;else rm "$sqlerror";fi
+	if [ -f "$sqlerror" ];then return 1;else return 0;fi
 }
 function trap_init () {
     script="$0";script=${script##*\\};
