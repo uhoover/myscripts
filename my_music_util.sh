@@ -8,6 +8,13 @@
 function xexit () {
 	if [ "$cmd" = "" ];then log stop;fi 
 }
+	#~ timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+	#~ str="null,tags_album,null,tags_title,null,tags_composer,null,tags_artist, \
+     #~ null,tags_genre,null,tags_date,duration,size,format_name,format_long_name, \
+     #~ filename,nb_streams,nb_programs,format_name,format_long_name,start_time,bit_rate, \
+     #~ probe_score,$timestamp,null"
+	#~ echo $str
+	#~ exit
 	set -e
 	tagfile="/tmp/tag.txt"
 	headfile="/tmp/taghead.txt"
@@ -16,7 +23,7 @@ function xexit () {
 	importtb="import"
 #
 function _amain () {
-	if [ "$#" -lt "1" ];then set -- "/media/uwe/daten/music/Beethoven,Ludwig van/" ;fi
+	if [ "$#" -lt "1" ];then set -- "/home/uwe/mnt/daten/music/Beethoven,Ludwig van/Konzerte/Klavierkonzerte_Nr_3_Nr_5" ;fi
 	pparms=$*;parm=""
 	while [ "$#" -gt 0 ];do
 		case "$1" in
@@ -32,20 +39,28 @@ function _amain () {
 	    shift
 	done
 	read_path_to_import $parm
-	import_tags
+  	import_tags
 }
 function setmsg () { func_setmsg $*; }
 function sql_execute () { func_sql_execute $*; }
 function import_tags () {
-	(echo "ID$(<"$headfile")";nl -n rn -v 0 $tagfile) > $TMPF
-	sql_execute $db "DROP TABLE IF EXISTS import";if [ "$?" -gt "0" ];then return  ;fi
-	sql_execute $db ".separator '|'\n.import $TMPF import";if [ "$?" -gt "0" ];then return  ;fi
-	sql_execute $db "DROP TABLE IF EXISTS tracks";if [ "$?" -gt "0" ];then return  ;fi
-	sql_execute $db ".read /home/uwe/my_databases/music.sqlite.docs/create_table_tracks.sql";if [ "$?" -gt "0" ];then return  ;fi
-	sql="insert into tracks select  \
-		 null,tags_album,tags_title,tags_composer,tags_track,tags_artist,tags_genre,duration,size, \
-		 filename,nb_streams,nb_programs,format_name,format_long_name,start_time,bit_rate,probe_score from file"
+	sql_execute $db ".read ${db}.docs/create_table_import.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".separator '|'\n.import $tagfile import";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read ${db}.docs/create_table_tracks.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read ${db}.docs/create_table_album.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read ${db}.docs/create_table_composer.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read ${db}.docs/create_table_genre.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read ${db}.docs/create_table_interpret.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read ${db}.docs/create_table_title.sql";if [ "$?" -gt "0" ];then return  ;fi
+	timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+	sql="insert into  track select \
+	        null,null,tags_album,null,tags_title,null,tags_composer,null,tags_artist, \
+            null,tags_genre,null,tags_date,duration,size,format_name,format_long_name, \
+            filename,nb_streams,nb_programs,format_name,format_long_name,start_time,bit_rate, \
+            probe_score,\"$timestamp\",null \
+         from import;"
 	sql_execute $db "$sql";if [ "$?" -gt "0" ];then return  ;fi
+#	echo $sql
 
 }
 function read_path_to_import () {
@@ -54,31 +69,32 @@ function read_path_to_import () {
     find "$*" -type f |  
     while read -r file;do
 		log debug "file $file"
-		[ ! -f "$tagfile" ] && get_id3 "1" $file > "$headfile"
-		get_id3 "2" $file >> "$tagfile"
+		if [ "$zl" = "" ];then zl=0;fi
+		zl=$((zl+1))
+		get_id3 $zl $file >> "$tagfile"
 	done  
 }
 function get_id3 () {
-	col=$1;shift;file=$*;type="${file##*.}"
+	zl=$1;shift;file=$*;type="${file##*.}"
 	case "$type" in
 		"mp3"|"ogg"|"wav")	;;
-		*) log "keine verarbeitung: $type $file";return
+		*) log "keine verarbeitung: $type $file";zl=$((zl-1));return
 	esac
-	get_id3_ffprobe "$*" | cut -d "=" -f$col > $tmpf
-	line="";del="|";zc=0
+#	get_id3_ffprobe "$*" | cut -d "=" -f2 > $tmpf
+	get_id3_ffprobe "$*"  > $tmpf;echo "" >> $tmpf
+	line="$zl";del="|";zc=0
 	while read -r args;do
 	    zc=$((zc+1))
-	    arg=$(echo $args | tr -d '|\\"'  )
+	    tag=${args%%=*};arg=${args#*=}
+	    if [ "$arg" = "" ];then arg="null"  ;fi
+	    arg=$(echo $arg | tr -d '|\\"'  )
+	    log $zc $tag $arg
 		line="$line$del$arg" 
-		if [ $zc -eq 16 ]; then break;fi
+		if [ "$tag" = "format.tags.date" ]; then break;fi
 	done  < "$tmpf"
-	if [ "$zc" != "16" ];then log "$zc $line"  ;fi
+#	if [ "$zc"   = "16" ];then line="$line$delnull"   ;fi
  	if [ "$line" = "" ];then return  ;fi
-	if [ "$col" == "1" ]; then
-		echo "${line//format./}" | tr '.' '_'
-	else
-		echo $line
-	fi
+	echo $line
 }
 function get_id3_ffprobe () {
 	ffprobe -loglevel quiet -show_format -print_format flat "$*"
@@ -86,6 +102,22 @@ function get_id3_ffprobe () {
 #	ffprobe -loglevel quiet -show_entries format_tags=album,artist,title "$*"
 #	ffprobe -loglevel quiet -show_entries format_tags=album,artist,title, -of default=noprint_wrappers=1:nokey=1 "$*"
 }
+function put_id3_ffprobe () {
+	set -x
+	in="$1";shift;out="$1";shift
+	parm="ffmpeg -i $in -map 0 -y -codec copy -write_id3v2 1"
+	while [ "$#" -gt "0" ];do
+		parm="$parm -metadata $1="$2"";shift;shift
+	done
+	parm="$parm  $out";echo $parm 
+	$parm
+	if [ "$?" -gt 0 ];then setmsg -i "fehler";fi
+	get_id3_ffprobe $out
+#	ffmpeg -i 12-Daybreak.mp3 -map 0 -y -codec copy -write_id3v2 1 -metadata title="nightwash" -metadata genre="barock" 12-Daybreak2.mp3
+#    my_music_util.sh --func put_id3_ffprobe 12-Daybreak.mp3 12-Daybreak2.mp3 title tageslicht genre new_wave
+
+}
+
 	log file start
 	_amain  $*
 exit 

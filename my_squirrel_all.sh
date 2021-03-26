@@ -175,11 +175,7 @@ function gui_tb_get_default () {
 }
 function gui_tb_get_dialog () {
 	log debug $@
-	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*"  
-    #~ if [ "$dfltdb" = "-" ];then str="";else str="$dfltdb";fi;eval 'export CBOXDBSEL'$tb'='$str 
- 	#~ if [ "$dflttb" = "-" ];then dflttb=$(x_get_tables $dfltdb "batch"| head -n1) ;fi; 
- 	#~ if [ "$dflttb" = "-" ];then str="";else str="$dflttb";fi;eval 'export CBOXENTRY'$tb'='$str 
-	#~ if [ "$dfltwhere" = "-" ];then str="";else str="$dfltwhere";fi;eval 'export CBOXWHERE'$tb'="'$str'"' 
+	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*"   
 	if [ "$tb" = "$dflttb" ]; then
 		IFS="@";marray=($(tb_meta_info "$dfltdb" "$dflttb"));unset IFS
 		pk="${marray[0]}"
@@ -259,7 +255,8 @@ function gui_tb_get_dialog () {
 	 </vbox>
 	 '
 }
-function setmsg () {
+function setmsg () { func_setmsg $*; }
+function setmsg_old () {
 	parm="--notification";text=""
 	while [ "$#" -gt "0" ];do
 		case "$1" in
@@ -286,8 +283,9 @@ function get_fileselect () {
 	mydb=$(zenity --file-selection --filename=$searchpath)
 	if [ "$mydb" = "" ];then echo "";return;fi
 	sql_execute $mydb ".tables"
-	error=$(<$efile)
-	if [ "$error" != "" ];then echo "";return;fi
+	if [ "$?" -gt "0" ];then return ;fi
+	#~ error=$(<$efile)
+	#~ if [ "$error" != "" ];then echo "";return;fi
 	setconfig_file "searchpath" "$mydb" "-" "letzter pfad fuer file-select"
 	echo $mydb 
 	set +x
@@ -333,6 +331,7 @@ function sql_rc_read () {
 	if [ "$mode" == "lt" ];then where="where $PRIMKEY < $row order by $PRIMKEY desc limit 1;";fi
 	if [ "$mode" == "gt" ];then where="where $PRIMKEY > $row order by $PRIMKEY      limit 1;";fi
 	erg=$(sql_execute "$db" ".mode line\n.header off\nselect * from $tb $where")
+	if [ "$?" -gt "0" ];then return ;fi
 	log debug $mode $row "erg = $erg"
 	if [ "$erg" == "" ];then setmsg "keine id $mode $row gefunden"  ;return  ;fi
     echo -e "$erg" > "$valuefile"
@@ -345,7 +344,8 @@ function x_get_tables () {
  	if [ "$1" = "-" ];then  return ;fi
 	if [ -d "$1" ];then setmsg "$1 ist ein Ordner\nBitte sqlite_db ausaehlen" ;return ;fi
 	sql_execute "$1" '.tables' | fmt -w 2
-	if [ "$(<$efile)" != "" ];then return;fi  
+	if [ "$?" -gt "0" ];then return ;fi
+	#~ if [ "$(<$efile)" != "" ];then return;fi  
 }
 function sql_rc_ctrl () {
 	log debug $*
@@ -396,9 +396,10 @@ function sql_rc_update_insert () {
 	fi
 	log debug uline $uline;log debug iline $iline;log debug stmt  $stmt
 	sql_execute "$db" "$stmt" 
-	erg=$error
-	log erg $erg
-	if [ "$erg" != "" ];then
+	#~ erg=$error
+	#~ log erg $erg
+	#~ if [ "$erg" != "" ];then
+	if [ "$?" -gt "0" ];then 
 		setmsg "-e" "abbruch rc = $erg : $stmt $db"
 		return
 	else
@@ -406,6 +407,7 @@ function sql_rc_update_insert () {
 	fi
 	if [ "$mode" == "insert" ];then
 		row=$(sql_execute "$db" ".header off\nselect max($PRIMKEY) from $tb;" );
+		if [ "$?" -gt "0" ];then return ;fi
 		sql_rc_read $db $tb eq $PRIMKEY $row
 	fi
 }
@@ -417,13 +419,15 @@ function sql_rc_delete () {
 	erg=$(sql_execute $"$db" "delete from $tb where $PRIMKEY = $ID;")  
 	[ "$erg" == "" ] && erg="delete erfolgreich" && setmsg $erg
 	erg=$(sql_execute $"$db" "select min($PRIMKEY) from $tb;")
+	if [ "$?" -gt "0" ];then return ;fi
 	if [ "$erg" -lt "$ID" ]; then
 	    sql_rc_read "$db" "$tb" "lt" "$PRIMKEY" "$ID"
 	else
 		sql_rc_read "$db" "$tb" "gt" "$PRIMKEY" "$ID"
 	fi
 }
-function sql_execute () {
+function sql_execute () { func_sql_execute $*; }
+function sql_execute_old () {
 	set -o noglob
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db" 2> "$efile" | tr -d '\r' 
@@ -432,35 +436,24 @@ function sql_execute () {
 }
 function sql_read_table ()  {
 	log $@
-#	off=$1;shift;view="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
 	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
 	if [ "$label" = "$tb" ];then off="off" ;else off="on"  ;fi
 	if [ "$db" = "" ];then setmsg -w --width=400 " sql_read_table\n label $label\n bitte datenbank selektieren\n $*" ;return  ;fi
 	if [ "$tb" = "" ];then setmsg -w --width=400 " sql_read_table\n label $label\n keine tabelle uebergeben\n $*" ;return  ;fi
-	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $path/tmp/export_${tb}.txt  
+	sql_execute $db ".separator |\n.header $off\nselect * from $tb $where;" | tee $path/tmp/export_${tb}.txt 
+	if [ "$?" -gt "0" ];then return ;fi 
 	setconfig "$label" "$db" "$tb" "$where" 
 }
 function tb_create_dialog_nb () {
-	set +x
 	tb=$3;where=""
-	if [ "$tb"  = "" ]; then tb=$(x_get_tables $2 "batch"| head -n1) ;fi
-	if [ "$tb" != "" ]; then eval 'where=$'$(getdbname $2)'dfltwhere'$1$tb ;fi
-	#~ if [ "$tb" != "-" ]; then
-		#~ eval 'dflttb=$'$(getdbname $2)'dflttb'$1 
-		#~ if [ "$dflttb"  = ""  ]; then tb=$(x_get_tables $2 "batch"| head -n1) ;fi
-		#~ if [ "$dflttb" != ""  ]; then
-			#~ eval 'where=$'$(getdbname $2)'dfltwhere'$1$tb
-		#~ else
-			#~ tb="-"
-		#~ fi  
-	#~ fi
-	if [ "$2"      != "" ];then eval 'export CBOXDBSEL'$1'='$2 ;fi
-	if [ "$tb"     != "" ];then eval 'export CBOXENTRY'$1'='$tb ;fi 
-	if [ "$where"  != "" ];then eval 'export CBOXWHERE'$1'="'$where'"';fi
-#	log debug $(export -p | grep "CBOX")
+	if [ "$tb"      = "" ]; then tb=$(x_get_tables "$2" "batch"| head -n1) ;fi
+	if [ "$tb"     != "" ]; then eval 'where=$'$(getdbname "$2")'dfltwhere'$1$tb ;fi
+	if [ "$2"      != "" ]; then eval 'export CBOXDBSEL'$1'='$2 ;fi
+	if [ "$tb"     != "" ]; then eval 'export CBOXENTRY'$1'='$tb ;fi 
+	if [ "$where"  != "" ]; then eval 'export CBOXWHERE'$1'="'$where'"';fi
+	log debug $(export -p | grep "CBOX")
 	erg="$1 $2 $tb $4 $5 $where"
 	notebook=$notebook" $1" 
-	set +x
 }
 function tb_create_dialog () {
 	log debug $@ 
@@ -502,48 +495,6 @@ function tb_create_dialog () {
 		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
 	done
 	echo "</notebook></window>" >> $dfile 
-#	gtkdialog  -f "$dfile"
-}
-function tb_create_dialog_alt () {
-	log debug $@ 
-	notebook="" 
-	dfile="$path/tmp/table.xml"; [ -f "$dfile" ] && rm "$dfile"	 
-#	if [ "$dfltdb" != "" ]; then eval 'dflttb=$'$(getdbname $dfltdb)'dflttbselectDB' ;fi
-#	if [ "$dfltdb"  = "" ]; then dfltdb="-";fi
-#	if [ "$dflttb"  = "" ]; then dflttb="-";fi
- 	cfile="$path/tmp/labelliste.txt";[ -f "$cfile" ] && rm "$cfile";db=""
-	notebook="";zn=-1 
-	while [ "$#" -gt "0" ];do
-		if   [ -f  "$1" ];then
-			db=$1
-			if [ "$2" = "" ] || [ -f  "$2" ]; then 
-				dblabel=$(basename $db);tblabel=${dblabel%%\.*}
-				eval 'tb=$'$(getdbname $db)'dflttb'
-				if [ "$tb" = "" ];then tb="-" ;fi
-				zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb "$tblabel" $db $tb "false" "true");notebook=$notebook" $tblabel" 
-			fi	
-		elif [ "$1" = "--all" ];then
-			x_get_tables "$db" > $tmpf 
-			while read -r line;do 
-				zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb $line $db $line "false" "false");notebook=$notebook" $line"
-			done < $tmpf
-		else 
-			zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb "$1" "$db" "$1" "false" "false");notebook=$notebook" $1" 
-		fi
-	    shift		
-	done
- 	if [ "$notable" != "$true" ];then 
- 		zn=$((zn+1));anb[$zn]=$(tb_create_dialog_nb "selectDB" "$dfltdb" "$dflttb" "true" "true");notebook=$notebook" selectDB" 
-	fi
-	setmsg -i -d "nolabel $nolabel\n false $false"
-	echo "<notebook show-tabs=\"$visible\" space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" > $dfile
-	for arg in "${anb[@]}" ;do
-		set -- $arg 
-		log debug $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
-		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
-	done
-	echo "</notebook>" >> $dfile 
-	gtkdialog  -f "$dfile"
 }
 function tb_set_meta_val   () {
 	set -x
@@ -577,6 +528,7 @@ function tb_meta_info () {
 	local db="$1";shift;local tb=$@;local del="";local del2="";local del3="";local line=""
 	TNAME="" ;TTYPE="" ;TNOTN="" ;TDFLT="" ;TPKEY="";TLINE="";TSELECT="";local ip=-1;local pk="-"
 	sql_execute "$db" ".header off\nPRAGMA table_info($tb);"   > $tableinfo
+	if [ "$?" -gt "0" ];then return ;fi
 	while read -r line;do
 		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
 		TNAME=$TNAME$del"${arr[1]}"	
