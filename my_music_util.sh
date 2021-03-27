@@ -18,6 +18,7 @@ function xexit () {
 	set -e
 	tagfile="/tmp/tag.txt"
 	headfile="/tmp/taghead.txt"
+	readpath="/home/uwe/my_scripts/resources/sql"
 	tmpf="/tmp/tmp.txt"
 	db="/home/uwe/my_databases/music.sqlite"
 	importtb="import"
@@ -44,15 +45,15 @@ function _amain () {
 function setmsg () { func_setmsg $*; }
 function sql_execute () { func_sql_execute $*; }
 function import_tags () {
- 	sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_import.sql";if [ "$?" -gt "0" ];then return  ;fi
+ 	sql_execute $db ".read $readpath/create_table_import.sql";if [ "$?" -gt "0" ];then return  ;fi
  	sql_execute $db ".separator '|'\n.import $tagfile import";if [ "$?" -gt "0" ];then return  ;fi
-	sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_track.sql";if [ "$?" -gt "0" ];then return  ;fi
-#		return;
-	#~ sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_album.sql";if [ "$?" -gt "0" ];then return  ;fi
-	#~ sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_composer.sql";if [ "$?" -gt "0" ];then return  ;fi
-	#~ sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_genre.sql";if [ "$?" -gt "0" ];then return  ;fi
-	#~ sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_interpret.sql";if [ "$?" -gt "0" ];then return  ;fi
-	#~ sql_execute $db ".read /home/uwe/my_scripts/resources/sql/create_table_title.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read $readpath/create_table_track.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read $readpath/create_table_album.sql";if [ "$?" -gt "0" ];then return  ;fi
+	sql_execute $db ".read $readpath/create_table_title.sql";if [ "$?" -gt "0" ];then return  ;fi
+
+	#~ sql_execute $db ".read $readpath/create_table_composer.sql";if [ "$?" -gt "0" ];then return  ;fi
+	#~ sql_execute $db ".read $readpath/create_table_genre.sql";if [ "$?" -gt "0" ];then return  ;fi
+	#~ sql_execute $db ".read $readpath/create_table_interpret.sql";if [ "$?" -gt "0" ];then return  ;fi
 	timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 	sql="insert into  track select \
 	        null,null,tags_album,null,tags_title,null,tags_composer,null,tags_artist, \

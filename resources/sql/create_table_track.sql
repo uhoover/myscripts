@@ -25,9 +25,4 @@ CREATE TABLE IF NOT EXISTS track(
   "track_timestamp"				TEXT,
   "track_info"					TEXT
 );
-CREATE TRIGGER IF NOT EXISTS track_after_insert 
-   AFTER INSERT ON track
-BEGIN
-	INSERT OR IGNORE INTO album(album_name) VALUES (new.track_album);
-    UPDATE track set ref_album_id = (select album_id from album where album_name = new.track_album);
-END;
+
