@@ -57,25 +57,9 @@ function amain () {
 	tableinfo="$path/tmp/tableinfo.txt"  
 	valuefile="$path/tmp/value.txt"
 	dfile="$path/tmp/table.xml"; 
-
-function gui_rc_entrys_hbox_extra () {
-	db="$1";shift;tb="$1";shift;field="$1";shift;nr="$1";shift;meta="$1";shift
-	cmd=$*;cmd1=${cmd%%;*};cmd2=${str#*;};if [ "$cmd2" == "" ];then cmd2=0  ;fi
-	setmsg -i -d --width=400 "extra befehl field $field nr $nr\n cmd $cmd\n cmd1 $cmd1\n cmd2 $cmd2"
-	echo  ' 		<hbox>'
-	echo  ' 			<text width-chars="20" justify="1"><label>bitte auswaehlen: </label></text>' 
-	echo  ' 			<comboboxtext space-expand="false" space-fill="false" auto-refresh="true" allow-empty="false" visible="true">'
-	echo  ' 				<variable>entry'$nr$nr'</variable>'
-	echo  ' 				<sensitive>true</sensitive>'
-    echo  ' 			    <input>/home/uwe/my_scripts/my_squirrel_all.sh --func sql_execute '$db '"'$cmd1'"</input>'
-    echo  '                 <action>'$script' --func tb_set_meta_val_extra '$nr'  '$cmd2' "$entry'$nr$nr'"</action>'
-    echo  '                 <action type="refresh">entry'$nr'</action>'
-    echo  '             </comboboxtext>'
-	echo  ' 		</hbox>'  
-}
 function gui_rc_entrys_hbox_cmd () {
 	db="$1";tb="$2";field="$3";nr="$4"
-	eval 'cmdextra=$'$(getdbname $db)$tb$field
+	eval 'cmdextra=$'$(get_field_name $db)$tb$field
 	if [ "$cmdextra" != "" ];then echo $cmdextra;return;fi
 	if [ "${field:0:4}" = "ref_" ];then
 		zw="${field:4}";table=${zw%_id*}
@@ -98,9 +82,9 @@ function gui_rc_entrys_hbox () {
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
 		cmdextra=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}" "$ia")
 	    if [ "$cmdextra" = "" ];then 
-			size=$sizemeta 
+			size=$sizemeta;sensitive="true" 
 		else 
-			size=5
+			size=5;sensitive="false"
 			cmd1=${cmdextra%%;*};cmd2=${cmdextra#*;};if [ "$cmd2" == "" ];then cmd2=0  ;fi
             val=$(tb_get_meta_val "$ia")
 		fi
@@ -108,24 +92,26 @@ function gui_rc_entrys_hbox () {
 #			echo    ' 			<text width-chars="'$sizelabel'" justify="1"><label>'" "${name[$ia]}'</label></text>' 
 			echo    ' 			<entry width_chars="'$size'"  space-fill="true">'  
 			echo    ' 				<variable>entry'$ia'</variable>' 
-			echo    ' 				<sensitive>true</sensitive>' 
+			echo    ' 				<sensitive>'$sensitive'</sensitive>' 
 			echo    ' 				<input>'$script' --func tb_get_meta_val '$ia'</input>' 
 			echo    ' 			</entry>' 
 		if [ "${cmdextra:0:5}" = ".mode" ]; then 
 			dflt=$(gui_rc_get_ref $db $cmd1 | grep "^$val");if [ "$dflt" = "" ];then dflt=" "  ;fi    
 			echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="true">'
+        ref_entry="$ref_entry $ia$ia"  
 			echo 	' 				<variable>entry'$ia$ia'</variable>'
 			echo  	' 				<sensitive>true</sensitive>'
 			echo  	' 		    	<input>echo '$dflt';/home/uwe/my_scripts/my_squirrel_all.sh --func gui_rc_get_ref '$db '"'$cmd1'"</input>'
-			echo  	'               <action>'$script' --func tb_set_meta_val_extra '$ia'  '$cmd2' "$entry'$ia$ia'"</action>'
+			echo  	'               <action>'$script' --func tb_set_meta_val_cmd ref '$ia'  '$cmd2' "$entry'$ia$ia'"</action>'
 			echo  	'               <action type="refresh">entry'$ia'</action>'
 			echo  	'       	</comboboxtext>'
 		fi
 		if [ "${cmdextra:2:6}" = "zenity" ]; then 
 			echo 	'			<button>'
+        ref_entry="$ref_entry $ia$ia" 
             echo	'				<variable>entry'$ia$ia'</variable>'
             echo	'				<input file stock="gtk-open"></input>'
-            echo    '    			<action>/home/uwe/my_scripts/my_squirrel_all.sh --func tb_set_meta_val_extra '$ia' "'$cmd1'"</action>'
+            echo    '    			<action>/home/uwe/my_scripts/my_squirrel_all.sh --func tb_set_meta_val_cmd fsl '$ia' "'$cmd1'"</action>'
             echo	'    			<action type="refresh">entry'$ia'</action>'	
             echo	'			</button>' 		
 		fi
@@ -139,6 +125,9 @@ function gui_rc_entrys_action_refresh () {
 	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
 		echo '				<action type="refresh">entry'$ia'</action>'  
+	done
+	for entry in $ref_entry; do 
+		echo '				<action type="refresh">entry'$entry'</action>' 
 	done
 	echo '				<action type="refresh">entryp</action>'
 }
@@ -161,7 +150,7 @@ function gui_rc_get_dialog () {
 	log debug $@
 	db="$1";shift;tb="$1";shift;row="$1";shift;PRIMKEY="$1";shift;ID="$1";shift
 	TNAMES="$1";shift;TLINE="$1";shift;TNOTN="$1";shift;TSELECT="$1"
-		sizetlabel=20;sizemeta=36
+	sizetlabel=20;sizemeta=36;ref_entry=""
 	echo '<vbox>'
 	echo '	<vbox>'
 	echo '		<hbox>'
@@ -326,7 +315,7 @@ function setmsg_old () {
 	eval 'zenity' $parm $text 
 	return $?
 }
-function getdbname () { echo $(readlink -f "$*") | tr -d '/.'; }
+function get_field_name () { echo $(readlink -f "$*") | tr -d '/.'; }
 function get_fileselect () {
 	if [ "$searchpath" = "" ]; then searchpath=$HOME;fi
 	mydb=$(zenity --file-selection --filename=$searchpath)
@@ -357,13 +346,13 @@ function setconfig () {
 	label=$1;shift;db=$1;shift;tb=$1;shift;where="$*"
 	if 		[ "$label" =  "selectDB" ]; then
 			setconfig_file "dfltdb" "$db" "-" "default-datenbank fuer dbselect (label=selectDB)"
-			field=$(getdbname $db)
+			field=$(get_field_name $db)
 	fi
 	if 		[ "$label" != "$tb" ]; then
-			setconfig_file "$(getdbname $db)dflttb$label"    "$tb"    "-" "default-tabelle fuer tbselect (label=$label)"
+			setconfig_file "$(get_field_name $db)dflttb$label"    "$tb"    "-" "default-tabelle fuer tbselect (label=$label)"
 	fi
 	if 		[ "$where" = "" ];then return;fi
-	setconfig_file "$(getdbname $db)dfltwhere$label$tb" "$where" "-" "default-where fuer $tb (label=$label)"
+	setconfig_file "$(get_field_name $db)dfltwhere$label$tb" "$where" "-" "default-where fuer $tb (label=$label)"
 	setconfig_file "dummy" "$where" "+" "$db $tb"
 }
 function sql_get_where () {
@@ -492,10 +481,10 @@ function tb_create_dialog_nb () {
 	if [ "$db"      = ""  ]; then db=$dfltdb;fi
 	if [ "$db"      = ""  ]; then db=$(get_fileselect);fi
 	if [ "$?"     -gt "0" ]; then return 1;fi
-	if [ "$tb"      = ""  ]; then eval 'tb=$'$(getdbname "$db")'dflttb'$label;fi
+	if [ "$tb"      = ""  ]; then eval 'tb=$'$(get_field_name "$db")'dflttb'$label;fi
 	if [ "$tb"      = ""  ]; then tb=$(x_get_tables "$db" "batch"| head -n1);fi
 	if [ "$?"     -gt "0" ]; then setmsg -i "no tb selected\n $db";return 1;fi
-	if [ "$tb"     != ""  ]; then eval 'where=$'$(getdbname "$db")'dfltwhere'$label$tb ;fi
+	if [ "$tb"     != ""  ]; then eval 'where=$'$(get_field_name "$db")'dfltwhere'$label$tb ;fi
 	if [ "$db"     != ""  ]; then eval 'export CBOXDBSEL'$label'='$db ;fi
 	if [ "$tb"     != ""  ]; then eval 'export CBOXENTRY'$label'='$tb ;fi 
 	if [ "$where"  != ""  ]; then eval 'export CBOXWHERE'$label'="'$where'"';fi
@@ -538,26 +527,36 @@ function tb_create_dialog () {
 	done
 	echo "</notebook></window>" >> $dfile 
 }
-function tb_set_meta_val_extra   () {
-	nr=$1;shift;range=$1;shift;value="$*"
-	setmsg -i -d "$FUNCNAME nr $nr range $range value $value"
-	if [ -f "$range" ]; then tb_set_meta_val $nr $range;return;fi
-	if [ "$range" = "Abbruch" ]; then return;fi
-	if [ "$range" = "" ]; then return;fi
-	if [ "$value" = "" ]; then return;fi
-    IFS=",";range=($range);IFS=" ";value=($value);unset IFS;parm="";del=""
-    for arg in ${range[@]}; do parm=$parm$del${value[$arg]};del=" ";done
-	tb_set_meta_val $nr $parm
+function tb_set_meta_val_cmd   () {
+	func=$1;shift;nr=$1;shift
+	set -x
+	if [ "$func" = "fsl" ]; then
+	    file="$*"
+		if [ -f "$file" ]; then tb_set_meta_val $nr "$file";fi
+		return
+	fi
+	if [ "$func" = "ref" ]; then
+		range="$1";shift;value="$*"
+		if [ "$value" = "" ]; then return;fi
+		if [ "${value:2:2}" = "--" ]; then return;fi
+		IFS=",";range=($range);IFS=" ";value=($value);unset IFS;parm="";del=""
+		for arg in ${range[@]}; do parm=$parm$del${value[$arg]};del=" ";done
+		tb_set_meta_val $nr $parm
+		return
+	fi
+	set +x 
+	setmsg -i  "$FUNCNAME $func nicht erkannt\n$*"
 }
 function tb_set_meta_val   () {
-	nr=$1;shift;value=$*
- 	setmsg -i -d "$FUNCNAME nr $nr value $value"
+	nr=$1;shift;value="$*"
+ 	setmsg -i "$FUNCNAME nr $nr value $value"
 	cp -f "$valuefile" "$valuefile"".bak2"
 	i=-1
 	while read line;do
 		i=$((i+1))
 		if [ "$i" != "$nr" ];then echo $line;continue;fi  
-		echo "${line%=*} = ${value% *}"
+	#?	echo "${line%=*} = ${value% *}"
+		echo "${line%=*} = ${value}"
 	done  < "$valuefile"".bak2" > "$valuefile"
 }
 function tb_get_meta_val   () {
