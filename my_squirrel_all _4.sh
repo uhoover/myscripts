@@ -74,45 +74,38 @@ function gui_rc_entrys_hbox_extra () {
 	echo  ' 		</hbox>'  
 }
 function gui_rc_entrys_hbox_cmd () {
-	db="$1";tb="$2";field="$3";nr="$4"
+	db="$1";tb="$2";field="$3"
 	eval 'cmdextra=$'$(getdbname $db)$tb$field
 	if [ "$cmdextra" != "" ];then echo $cmdextra;return;fi
-	if [ "${field:0:4}" = "ref_" ];then
-		zw="${field:4}";table=${zw%_id*}
-		echo ".mode column\n.separator ','\nselect * from $table;0"
-		return  
-	fi	 
-	if [ "${field:0:4}" = "fls_" ] || [ "${field}" = "track_filename" ];then
-#	    set -x
-	    file=$(tb_get_meta_val $nr)
-		echo '$(zenity --file-selection --filename="'$file'")'
-		return  
-	fi	 
-	echo ""
+	if [ "${field:0:4}" != "ref_" ];then echo "";return  ;fi
+	zw="${field:4}";table=${zw%_id*}
+	echo ".mode column\n.separator ','\nselect * from $table;0"
 }
 function gui_rc_entrys_hbox () {
 	log debug $@
 	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
-#	sizetlabel=20;sizemeta=36
+	sizetlabel=20;sizemeta=25
 	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
-		cmdextra=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}" "$ia")
+		cmdextra=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}")
 	    if [ "$cmdextra" = "" ];then 
-			size=$sizemeta 
+			size=40 
 		else 
 			size=5
 			cmd1=${cmdextra%%;*};cmd2=${cmdextra#*;};if [ "$cmd2" == "" ];then cmd2=0  ;fi
             val=$(tb_get_meta_val "$ia")
+			dflt=$(gui_rc_get_ref $db $cmd1 | grep "^$val");if [ "$dflt" = "" ];then dflt=" "  ;fi   
 		fi
 			echo    '	<hbox>'   
-#			echo    ' 			<text width-chars="'$sizelabel'" justify="1"><label>'" "${name[$ia]}'</label></text>' 
+			echo    ' 			<text width-chars="'$sizelabel'" justify="1"><label>'" "${name[$ia]}'</label></text>' 
 			echo    ' 			<entry width_chars="'$size'"  space-fill="true">'  
 			echo    ' 				<variable>entry'$ia'</variable>' 
 			echo    ' 				<sensitive>true</sensitive>' 
 			echo    ' 				<input>'$script' --func tb_get_meta_val '$ia'</input>' 
 			echo    ' 			</entry>' 
-		if [ "${cmdextra:0:5}" = ".mode" ]; then 
-			dflt=$(gui_rc_get_ref $db $cmd1 | grep "^$val");if [ "$dflt" = "" ];then dflt=" "  ;fi    
+		if [ "$cmdextra" = "" ]; then  
+			echo  	' 			<text width-chars="'$sizemeta'" justify="1"><label>'${meta[$ia]}'</label></text>'   
+		else
 			echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="true">'
 			echo 	' 				<variable>entry'$ia$ia'</variable>'
 			echo  	' 				<sensitive>true</sensitive>'
@@ -121,15 +114,6 @@ function gui_rc_entrys_hbox () {
 			echo  	'               <action type="refresh">entry'$ia'</action>'
 			echo  	'       	</comboboxtext>'
 		fi
-		if [ "${cmdextra:2:6}" = "zenity" ]; then 
-			echo 	'			<button>'
-            echo	'				<variable>entry'$ia$ia'</variable>'
-            echo	'				<input file stock="gtk-open"></input>'
-            echo    '    			<action>/home/uwe/my_scripts/my_squirrel_all.sh --func tb_set_meta_val_extra '$ia' "'$cmd1'"</action>'
-            echo	'    			<action type="refresh">entry'$ia'</action>'	
-            echo	'			</button>' 		
-		fi
-			echo  	' 			<text width-chars="'$sizemeta'" justify="2"><label>'${name[$ia]}' (' ${meta[$ia]}')</label></text>'   
 			echo    '	</hbox>' 
 	done
 }
@@ -155,22 +139,21 @@ function gui_rc_entrys_variable_list () {
 function gui_rc_get_ref () {
 	db=$1;shift;stmt=$*
 	sql_execute $db $stmt | left 50
-	echo "\"---- bitte waehlen --------------------------------------------------------------------------------\""
+	echo "\"---------------------------- bitte waehlen ----------------___-------------------------------------\""
 }
 function gui_rc_get_dialog () {
 	log debug $@
 	db="$1";shift;tb="$1";shift;row="$1";shift;PRIMKEY="$1";shift;ID="$1";shift
 	TNAMES="$1";shift;TLINE="$1";shift;TNOTN="$1";shift;TSELECT="$1"
-		sizetlabel=20;sizemeta=36
 	echo '<vbox>'
 	echo '	<vbox>'
 	echo '		<hbox>'
-#	echo '			<text width-chars="20" justify="3"><label>'"$PRIMKEY"' (PK)</label></text>'
+	echo '			<text width-chars="20" justify="3"><label>'"$PRIMKEY"' (PK)</label></text>'
 	echo '			<entry width_chars="30" space-expand="false">'
 	echo '				<variable>entryp</variable>'
 	echo '				<input>'$script' --func tb_get_meta_val '"$ID"'</input>'
 	echo '			</entry>'
-	echo '			<text width-chars="46" justify="3"><label>'"$PRIMKEY"' (PK) (type,null,default,primkey)</label></text>'
+	echo '			<text width-chars="26" justify="3"><label>type,null,default,primkey</label></text>'
 	echo '		</hbox>'
 	echo '	</vbox>'
 	echo '  <frame>'
@@ -540,18 +523,13 @@ function tb_create_dialog () {
 }
 function tb_set_meta_val_extra   () {
 	nr=$1;shift;range=$1;shift;value="$*"
-	setmsg -i -d "$FUNCNAME nr $nr range $range value $value"
-	if [ -f "$range" ]; then tb_set_meta_val $nr $range;return;fi
-	if [ "$range" = "Abbruch" ]; then return;fi
-	if [ "$range" = "" ]; then return;fi
-	if [ "$value" = "" ]; then return;fi
     IFS=",";range=($range);IFS=" ";value=($value);unset IFS;parm="";del=""
     for arg in ${range[@]}; do parm=$parm$del${value[$arg]};del=" ";done
 	tb_set_meta_val $nr $parm
 }
 function tb_set_meta_val   () {
 	nr=$1;shift;value=$*
- 	setmsg -i -d "$FUNCNAME nr $nr value $value"
+	setmsg -i "nr $nr value $value"
 	cp -f "$valuefile" "$valuefile"".bak2"
 	i=-1
 	while read line;do
