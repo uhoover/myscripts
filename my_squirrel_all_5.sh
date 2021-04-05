@@ -21,16 +21,17 @@ function ftest() {
 		parm_value	TEXT,
 		parm_type	TEXT); 
 		insert into parm values (null,0,"0	true","boolean"),(null,1,"1	false","boolean"),
-								(null,0,"0	inserted","status"),(null,1,"1	in Bearbeitung","status"),
+								(null,0,"0	-","status"),(null,1,"1	in Bearneitung","status"),
 								(null,2,"2	ready","status"),(null,9,"9	update-komplete","status"); 
 EOF
  
 }
 function amain () {
 	log file   
+#	log file tlog verbose_on debug_on  
 	pparms=$*
-	amain_load_parm
-	notable=$false;visible="true";myparm="";nowidgets="false"
+	load_parm
+	refresh=$false;notable=$false;visible="true";parm="";nocmd="false"
 	while [ "$#" -gt 0 ];do
 		case "$1" in
 	        "--tlog"|-t|--show-log-with-tail)  			log tlog ;;
@@ -40,18 +41,16 @@ function amain () {
 	        "--func"|-f|--execute-function)  			shift;cmd="nostop";log debug $pparms;$*;return ;;
 	        "--notable"|--no-tab-with-db-selection)		notable=$true ;;
 	        "--nolabel"|--no-notebook-label)			nolabel=$true ;;
-	        "--nowidgets"|--no-extra-widgets)			nowidgets="true" ;;
 	        "--help"|-h)								func_help $FUNCNAME;echo -e "\n     usage dbname [table --all]]" ;return;;
-	        "--all"|--tab-each-table)					myparm="$myparm $1";;
+	        "--all"|--tab-each-table)					parm="$parm $1";;
 	        -*)   										func_help $FUNCNAME;return;;
-	        *)    										myparm="$myparm $1";;
+	        *)    										parm="$parm $1";;
 	    esac
 	    shift
 	done
-	export nowidgets
     log start
     log debug $pparms tlog
-	tb_create_dialog   $myparm	
+	tb_create_dialog   $parm	
 	if [ "$?" = "0" ];then gtkdialog  -f "$dfile";fi
 
 }
@@ -74,9 +73,8 @@ function amain () {
 	dbparm="$path/parm.sqlite"
 	cmd_left=50
 	please_choose="---- please choose "$(copies -c "-" 120);
-	notable=$false;visible="true";parm="";nowidgets="false"
  
-function amain_load_parm() {
+function load_parm() {
 	if [ -f $dbparm ];then 
 		table=$(sql_execute $dbparm ".tables parm") ;
 		if [ "$table" = "parm" ];then return  ;fi
@@ -94,8 +92,8 @@ EOF
 
 }
 function get_ref_parms () { ref="$*";ref2=${ref#*\#};echo ${ref2%%\|*}; }
-function gui_rc_entrys_hbox_cmd () {
-	if [ "$nowidgets" = "true" ];then echo "";return  ;fi
+function gui_rc_entrys_hbox_cmd_neu () {
+	if [ "$nocmd" = "true" ];then echo "";return  ;fi
 	db=$1;tb=$2;field="$3"
 	eval 'cmd=$'$(get_field_name $db)$tb$field;if [ "$cmd" != "" ];then echo "cmd $cmd";return ;fi
 	if [ "$parm_ref" != "" ]; then
@@ -118,14 +116,46 @@ function gui_rc_entrys_hbox_cmd () {
 		ref_*|reference_*) 	field=${field#*_};tb=${field%%_*};echo "reference#$db#$tb#$field#0";return		;;
 	esac
 }
-function gui_rc_entrys_hbox () {
+function gui_rc_entrys_hbox_cmd () {
+	if [ "$nocmd" == "true" ];then echo "";return  ;fi
+	db=$1;tb=$2;field="$1"
+	eval 'cmd=$'$(get_field_name $db)$tb$field
+	if [ "$cmd" != "" ];	   then echo "$cmd";return;fi
+	case "$field" in
+		fs_*|fsl_*|fsf_*|fsd_*) 	echo "fileselect";return	;;
+		fsld_*|fsd_*) 		echo "dirselect";return		;;
+		ref_*|reference_*) 	echo "reference";return		;;
+		bln_*|boolean_*) 	echo "boolean";return		;;
+	esac
+	if   [ "$(pos $field  $cmd_fsl)" -gt "-1" ]; then echo "fileselect";return;fi
+	if   [ "$(pos $field  $cmd_ref)" -gt "-1" ]; then echo "reference";return;fi
+	if   [ "$(pos $field  $cmd_bln)" -gt "-1" ]; then echo "boolean";return;fi
+    echo ""
+}
+function gui_rc_entrys_hbox_cmd_old () {
+	db="$1";tb="$2";field="$3";nr="$4"
+	eval 'cmdextra=$'$(get_field_name $db)$tb$field
+	if [ "$cmdextra" != "" ];then echo $cmdextra;return;fi
+	if [ "${field:0:4}" = "ref_" ];then
+		zw="${field:4}";table=${zw%_id*}
+		echo ".mode column\n.separator ','\nselect * from $table;0"
+		return  
+	fi	 
+	if [ "${field:0:4}" = "fls_" ] || [ "${field}" = "track_filename" ];then
+	    file=$(tb_get_meta_val $nr)
+		echo '$(zenity --file-selection --filename="'$file'")'
+		return  
+	fi	 
+	echo ""
+}
+function gui_rc_entrys_hbox_neu () {
 	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
     eval 'cmd_ref=$'$(get_field_name $db$tb"_ref")
     eval 'cmd_fsl=$'$(get_field_name $db$tb"_fsl")
     eval 'cmd_bln=$'$(get_field_name $db$tb"_bln")
    	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
-		cmd=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}")
+		cmd=$(gui_rc_entrys_hbox_cmd_neu "$db" "$tb" "${name[$ia]}")
 		echo    '	<hbox>' 
 		IFS='#';set -- $cmd;unset IFS
 		if  [ "$1" = "" ] || [ "$1" = "fileselect" ]; then 
@@ -139,13 +169,6 @@ function gui_rc_entrys_hbox () {
 		    ref_entry="$ref_entry $ia"'_'"$ia" 
 		    file=$(tb_get_meta_val $ia)
 		    stmt="zenity --file-selection $2 --filename=\"$file\""
-		    if [ "$2" = "play" ]; then
-		    echo	'	        <button>'
-			echo	'				<variable>entry17_17_17</variable>'
-			echo	'				<input file stock="gtk-media-play"></input>'
-    		echo	' 				<action>ffplay "'$file'" &</action>'
-			echo	'</button>'
-		    fi
 			echo 	'			<button>'
             echo	'				<variable>entry'$ia'_'$ia'</variable>'
             echo	'				<input file stock="gtk-open"></input>'
@@ -182,6 +205,114 @@ function gui_rc_entrys_hbox () {
 		if 	[ "$1" = "cmd" ] ;then echo ${@:2};fi 
 		echo  	' 			<text width-chars="'$sizemeta'" justify="2"><label>'${name[$ia]}' (' ${meta[$ia]}')</label></text>'   
 		echo    '	</hbox>' 
+#		if [ "$ia" = "3" ];then  break  ;fi
+	done
+}
+function gui_rc_entrys_hbox () {
+	log debug $@
+	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+    eval 'cmd_ref=$'$(get_field_name $db"_ref")
+    eval 'cmd_fsl=$'$(get_field_name $db"_fsl")
+    eval 'cmd_bln=$'$(get_field_name $db"_bln")
+	for ((ia=0;ia<${#name[@]};ia++)) ;do
+		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
+		cmdextra=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}")
+		type=${cmdextra%% *};cmd=${cmdextra#* };ref_field=${name[$ia]#*_};ref_tb=${ref_field%%_*}
+			echo    '	<hbox>' 
+	    if  [ "$type" = "" ] || [ "$type" = "fileselect" ] || [ "$type" = "dirselect" ];then 
+			echo    ' 			<entry width_chars="'$sizemeta'"  space-fill="true">'  
+			echo    ' 				<variable>entry'$ia'</variable>' 
+			echo    ' 				<sensitive>true</sensitive>' 
+			echo    ' 				<input>'$script' --func tb_get_meta_val '$ia'</input>' 
+			echo    ' 			</entry>' 
+		fi
+		if 	[ "$type" = "reference" ] || [ "$type" = "boolean" ];then 
+		    ref_entry="$ref_entry $ia""_""$ia" 
+		    val=$(tb_get_meta_val "$ia")
+		    if 	[ "$type" = "reference" ]; then
+		        stmt='/home/uwe/my_scripts/my_squirrel_all.sh --func gui_rc_get_cmd "'$db'" "'$ref_tb'" "'$ref_field'" "'$ia'" "'$vgl'"' 
+#		        stmt='/home/uwe/my_scripts/my_squirrel_all.sh --func gui_rc_get_cmd '$db' ".mode column\nselect * from '$ref_tb'"' 
+#		        dflt=$(sql_execute $db ".mode column\nselect * from $ref_tb where $ref_field = \"$val\"")            
+		    else
+				if [ "$val" = "0" ]; then dflt="0   true";stmt="1  false";else dflt="1  false";stmt="0   true";fi
+ 				stmt="echo \"$dflt\";echo \"$stmt\";echo \"$please_choose\""
+#				stmt='select \"0\",\"=\",\"true\" union select \"1\",\"=\",\"false\"'
+#				stmt='/home/uwe/my_scripts/my_squirrel_all.sh --func gui_rc_get_cmd '$db' ".mode column\n'$stmt'"' 
+		    fi               
+			echo    ' 			<entry width_chars="5"  space-fill="true">'  
+			echo    ' 				<variable>entry'$ia'</variable>' 
+			echo    ' 				<sensitive>false</sensitive>' 
+			echo    ' 				<input>'$script' --func tb_get_meta_val '$ia'</input>' 
+			echo    ' 			</entry>' 
+            echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="true">'
+			echo 	' 				<variable>entry'$ia'_'$ia'</variable>'
+			echo  	' 				<sensitive>true</sensitive>'
+			echo  	' 		    	<input>'$stmt'</input>'
+#			echo  	'               <action>zenity --info --text="choose: $entry'$ia'_'$ia'"</action>'
+			echo  	'               <action>'$script' --func tb_set_meta_val_cmd '$type' '$ia'  0 "$entry'$ia'_'$ia'"</action>'
+			echo  	'               <action type="refresh">entry'$ia'</action>'
+			echo  	'       	</comboboxtext>'
+		fi
+		if [ "${type}" = "fileselect" ]  || [ "$type" = "dirselect" ]; then 
+		    ref_entry="$ref_entry $ia"'_'"$ia" 
+		    if [ "$type" = "dirselect" ];then dir="--directory";else dir="";fi
+		    file=$(tb_get_meta_val $ia)
+		    stmt="zenity --file-selection $dir --filename=\"$file\""
+			echo 	'			<button>'
+            echo	'				<variable>entry'$ia'_'$ia'</variable>'
+            echo	'				<input file stock="gtk-open"></input>'
+            echo    '    			<action>/home/uwe/my_scripts/my_squirrel_all.sh --func tb_set_meta_val '$ia' $('$stmt')</action>'
+            echo	'    			<action type="refresh">entry'$ia'</action>'	
+            echo	'			</button>' 		
+		fi
+
+			echo  	' 			<text width-chars="'$sizemeta'" justify="2"><label>'${name[$ia]}' (' ${meta[$ia]}')</label></text>'   
+			echo    '	</hbox>' 
+	done
+}
+function gui_rc_entrys_hbox_old () {
+	log debug $@
+	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+#	sizetlabel=20;sizemeta=36
+	for ((ia=0;ia<${#name[@]};ia++)) ;do
+		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
+		cmdextra=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}" "$ia")
+	    if [ "$cmdextra" = "" ];then 
+			size=$sizemeta;sensitive="true" 
+		else 
+			size=5;sensitive="false"
+			cmd1=${cmdextra%%;*};cmd2=${cmdextra#*;};if [ "$cmd2" == "" ];then cmd2=0  ;fi
+            val=$(tb_get_meta_val "$ia")
+		fi
+			echo    '	<hbox>'   
+#			echo    ' 			<text width-chars="'$sizelabel'" justify="1"><label>'" "${name[$ia]}'</label></text>' 
+			echo    ' 			<entry width_chars="'$size'"  space-fill="true">'  
+			echo    ' 				<variable>entry'$ia'</variable>' 
+			echo    ' 				<sensitive>'$sensitive'</sensitive>' 
+			echo    ' 				<input>'$script' --func tb_get_meta_val '$ia'</input>' 
+			echo    ' 			</entry>' 
+		if [ "${cmdextra:0:5}" = ".mode" ]; then 
+			dflt=$(gui_rc_get_ref $db $cmd1 | grep "^$val");if [ "$dflt" = "" ];then dflt=" "  ;fi    
+			echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="true">'
+        ref_entry="$ref_entry $ia""_""$ia"  
+			echo 	' 				<variable>entry'$ia$ia'</variable>'
+			echo  	' 				<sensitive>true</sensitive>'
+			echo  	' 		    	<input>echo '$dflt';/home/uwe/my_scripts/my_squirrel_all.sh --func gui_rc_get_ref '$db '"'$cmd1'"</input>'
+			echo  	'               <action>'$script' --func tb_set_meta_val_cmd ref '$ia'  '$cmd2' "$entry'$ia'_'$ia'"</action>'
+			echo  	'               <action type="refresh">entry'$ia'</action>'
+			echo  	'       	</comboboxtext>'
+		fi
+		if [ "${cmdextra:2:6}" = "zenity" ]; then 
+			echo 	'			<button>'
+        ref_entry="$ref_entry $ia""_""$ia" 
+            echo	'				<variable>entry'$ia'_'$ia'</variable>'
+            echo	'				<input file stock="gtk-open"></input>'
+            echo    '    			<action>/home/uwe/my_scripts/my_squirrel_all.sh --func tb_set_meta_val_cmd fsl '$ia' "'$cmd1'"</action>'
+            echo	'    			<action type="refresh">entry'$ia'</action>'	
+            echo	'			</button>' 		
+		fi
+			echo  	' 			<text width-chars="'$sizemeta'" justify="2"><label>'${name[$ia]}' (' ${meta[$ia]}')</label></text>'   
+			echo    '	</hbox>' 
 	done
 }
 function gui_rc_entrys_action_refresh () {
@@ -192,7 +323,7 @@ function gui_rc_entrys_action_refresh () {
 		echo '				<action type="refresh">entry'$ia'</action>'  
 	done
 	for entry in $ref_entry; do 
-#		echo '				<action type="clear">entry'$entry'</action>' 
+		echo '				<action type="clear">entry'$entry'</action>' 
 		echo '				<action type="refresh">entry'$entry'</action>' 
 	done
 	echo '				<action type="refresh">entryp</action>'
@@ -248,7 +379,7 @@ function gui_rc_get_dialog () {
 	echo '	</vbox>'
 	echo '  <frame>'
 	echo '  <vbox height="600" hscrollbar-policy="0">'
-			   gui_rc_entrys_hbox $db $tb $PRIMKEY $ID $TNAMES $TLINE
+			   gui_rc_entrys_hbox_neu $db $tb $PRIMKEY $ID $TNAMES $TLINE
 	echo '	</vbox>'
 	echo '  </frame>'
 	echo '	<hbox>'
@@ -297,7 +428,7 @@ function gui_tb_get_default () {
 	echo "<default>\"$*\"</default>"
 }
 function gui_tb_get_dialog () {
-	log debug $FUNCNAME $@
+	log debug $@
 	tb="$1";shift;dfltdb="$1";shift;dflttb=$1;shift;visibleDB=$1;shift;visibleTB="$1";shift;dfltwhere="$*"   
 	if [ "$tb" = "$dflttb" ]; then
 		IFS="@";marray=($(tb_meta_info "$dfltdb" "$dflttb"));unset IFS
@@ -312,7 +443,6 @@ function gui_tb_get_dialog () {
 		label=$dfltlabel
 		visibleHD="false";off="off"
 	fi
-	if [ "$nowidgets" == "true" ];then nocmd="--nowidgets";else nocmd="" ;fi
 	echo  '
 	<vbox>
 		<tree headers_visible="'$visibleHD'" autorefresh="true" hover_selection="false" hover_expand="true" exported_column="0">
@@ -320,7 +450,7 @@ function gui_tb_get_dialog () {
 			<height>500</height><width>600</width> 
 			<variable>TREE'$tb'</variable>
 			<input>'$script' --func sql_read_table '$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' "$CBOXWHERE'$tb'"</input>
-			<action>'$script' '$nocmd' --func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
+			<action>'$script' --func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
 			<action type="enable">BUTTONAENDERN'$tb'</action>
 		</tree>
 		<frame click = selection >
@@ -380,6 +510,26 @@ function gui_tb_get_dialog () {
 	 '
 }
 function setmsg () { func_setmsg $*; }
+function setmsg_old () {
+	parm="--notification";text=""
+	while [ "$#" -gt "0" ];do
+		case "$1" in
+		"--width"*)				parm="$parm ""$1"		;;
+		"-w"|"--warning") 		parm="--warning"		;;
+		"-e"|"--error")   		parm="--error"			;;
+		"-i"|"--info")    		parm="--info" 		 	;;
+		"-n"|"--notification")  parm="--notification"	;;
+		"-q"|"--question")	    parm="--question"		;;
+		"-d"|"--debug")	        if [ "$debug_on" = "0" ];then  return  ;fi		;;
+		"-*" )	   				parm="$parm ""$1"		;;
+		*)						text="$text ""$1"		;;
+		esac
+		shift
+	done
+	if [ "$text" != "" ];then text="--text='$text'" ;fi
+	eval 'zenity' $parm $text 
+	return $?
+}
 function get_field_name () { echo $(readlink -f "$*") | tr -d '/.'; }
 function get_fileselect () {
 	if [ "$searchpath" = "" ]; then searchpath=$HOME;fi
@@ -440,14 +590,15 @@ function sql_rc_read () {
     cp -f "$valuefile" "$valuefile.bak"
 }
 function x_get_tables () {
-	log debug $* 
+	log debug $*
+	setmsg -i -d "x_get_tables #$*#"  
  	if [ "$1" = "" ];then  return ;fi
 	if [ -d "$1" ];then setmsg "$1 ist ein Ordner\nBitte sqlite_db ausaehlen" ;return ;fi
 	sql_execute "$1" '.tables' | fmt -w 2
 	if [ "$?" -gt "0" ];then return 1;fi
 }
 function sql_rc_ctrl () {
-	log $FUNCNAME $*
+	log debug $*
 	if [ "$#" -gt "3" ];then setmsg -w  " $#: zu viele Parameter\n tabelle ohne PRIMKEY?" ;return  ;fi
 	row="$1";shift;db="$1";shift;tb="$@"
 	IFS="@";marray=($(tb_meta_info "$db" "$tb"));unset IFS
@@ -459,6 +610,7 @@ function sql_rc_ctrl () {
 		echo "" > "$valuefile" 
 	else
 		sql_rc_read $db $tb eq $PRIMKEY $row > "$valuefile"
+		setmsg -i "valuefile"
 	fi
     row_change_xml="$path/tmp/change_row_${tb}.xml"
     gui_rc_get_dialog $db $tb $row $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT > "$row_change_xml"	
@@ -541,7 +693,6 @@ function sql_read_table ()  {
 	setconfig "$label" "$db" "$tb" "$where" 
 }
 function tb_create_dialog_nb () {
- 	log debug $FUNCNAME $LINENO $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})") 
 	label="$1";db="$2";tb="$3";where=""
 	if [ "$db"      = ""  ]; then db=$dfltdb;fi
 	if [ "$db"      = ""  ]; then db=$(get_fileselect);fi
@@ -553,7 +704,7 @@ function tb_create_dialog_nb () {
 	if [ "$db"     != ""  ]; then eval 'export CBOXDBSEL'$label'='$db ;fi
 	if [ "$tb"     != ""  ]; then eval 'export CBOXENTRY'$label'='$tb ;fi 
 	if [ "$where"  != ""  ]; then eval 'export CBOXWHERE'$label'="'$where'"';fi
-#	log debug $(export -p | grep "CBOX")
+	log debug $(export -p | grep "CBOX")
 	erg="$label $db $tb $4 $5 $where"
 	notebook=$notebook" $1" 
 }
@@ -580,7 +731,6 @@ function tb_create_dialog () {
 	    shift		
 	done
  	if [ "$notable" != "$true" ];then 
-		log debug $FUNCNAME $LINENO db $dfltdb tb $dflttb
  		tb_create_dialog_nb "selectDB" "$dfltdb" "$dflttb" "true" "true";if [ "$?" = "0" ];then zn=$((zn+1));anb[$zn]="$erg";fi
 	fi
 	if [ "$zn" -lt "0" ];then return 1 ;fi
@@ -588,7 +738,7 @@ function tb_create_dialog () {
 	echo "<notebook show-tabs=\"$visible\" space-expands=\"true\" tab-labels=\""$(echo $notebook | tr ' ' "|")"\">" >> $dfile
 	for arg in "${anb[@]}" ;do
 		set -- $arg 
- 		log debug  $FUNCNAME $LINENO $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
+		log debug $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
 		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
 	done
 	echo "</notebook></window>" >> $dfile 
@@ -601,8 +751,28 @@ function tb_set_meta_val_cmd   () {
 	for arg in ${range[@]}; do parm=$parm$del${value[$arg]};del=" ";done	
 	tb_set_meta_val $nr "$parm"
 }
+function tb_set_meta_val_cmd_alt   () {
+	func=$1;shift;nr=$1;shift
+	if [ "$func" = "fileselect" ]; then
+	    file="$*"
+		if [ -f "$file" ]; then tb_set_meta_val $nr "$file";fi
+		return
+	fi
+	if [ "$func" = "reference" ] || [ "$func" = "boolean" ]; then
+		range="$1";shift;value="$*"
+		if [ "$value" = "" ]; then return;fi
+		if [ "${value:2:2}" = "--" ]; then return;fi
+		IFS=",";range=($range);IFS=" ";value=($value);unset IFS;parm="";del=""
+		for arg in ${range[@]}; do parm=$parm$del${value[$arg]};del=" ";done
+	set +x	
+		tb_set_meta_val $nr $parm
+		return
+	fi
+	setmsg -i  "$FUNCNAME $func nicht erkannt\n$*"
+}
 function tb_set_meta_val   () {
 	nr=$1;shift;value="$*"
+# 	setmsg -i -d "$FUNCNAME nr $nr value $value"
 	cp -f "$valuefile" "$valuefile"".bak2"
 	i=-1
 	while read line;do
