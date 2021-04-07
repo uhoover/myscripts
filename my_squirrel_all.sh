@@ -113,7 +113,7 @@ function gui_rc_entrys_hbox_cmd () {
 		if [ "$ix" -gt "-1" ]; then echo "fileselect#$(get_ref_parms ${cmd_fsl:$ix})";return;fi
 	fi
 	case "$field" in
-		fs_*|fsl_*|fsf_*) 	echo "fileselect#$field" ;return	;;
+		fls_*|fsl_*|fsf_*) 	echo "fileselect#$field#play" ;return	;;
 		fsld_*|fsd_*) 		echo "fileselect#$field#--directory";return		;;
 		ref_*|reference_*) 	field=${field#*_};tb=${field%%_*};echo "reference#$db#$tb#$field#0";return		;;
 	esac
@@ -136,22 +136,26 @@ function gui_rc_entrys_hbox () {
 			echo    ' 			</entry>' 
 		fi
 		if [ "$1" = "fileselect" ]; then 
+			set -x
 		    ref_entry="$ref_entry $ia"'_'"$ia" 
 		    file=$(tb_get_meta_val $ia)
-		    stmt="zenity --file-selection $2 --filename=\"$file\""
-		    if [ "$2" = "play" ]; then
+		    if [ "$3" = "play" ]; then
 		    echo	'	        <button>'
 			echo	'				<variable>entry17_17_17</variable>'
 			echo	'				<input file stock="gtk-media-play"></input>'
     		echo	' 				<action>ffplay "'$file'" &</action>'
-			echo	'</button>'
+			echo	'			</button>'
+					dir=""
+			else 	dir="$3"
 		    fi
+		    stmt="zenity --file-selection $dir --filename=\"$file\""
 			echo 	'			<button>'
             echo	'				<variable>entry'$ia'_'$ia'</variable>'
             echo	'				<input file stock="gtk-open"></input>'
             echo    '    			<action>/home/uwe/my_scripts/my_squirrel_all.sh --func tb_set_meta_val '$ia' 0 $('$stmt')</action>'
             echo	'    			<action type="refresh">entry'$ia'</action>'	
-            echo	'			</button>' 		
+            echo	'			</button>' 
+            set +x		
 		fi
 		if 	[ "$1" = "reference" ] || [ "$1" = "parm" ] ;then 
 		    ref_entry="$ref_entry $ia""_""$ia"
@@ -323,6 +327,7 @@ function gui_tb_get_dialog () {
 			<action>'$script' '$nocmd' --func sql_rc_ctrl $TREE'$tb' $CBOXDBSEL'$tb' $CBOXENTRY'$tb'</action>
 			<action type="enable">BUTTONAENDERN'$tb'</action>
 		</tree>
+		<vbox space-expand="false" space-fill="true">
 		<frame click = selection >
 			<hbox homogenoues="true">
 			    <hbox visible="'$visibleDB'">
@@ -376,6 +381,7 @@ function gui_tb_get_dialog () {
 			</button>
 			<button cancel></button>
 		</hbox>
+		</vbox>
 	 </vbox>
 	 '
 }
@@ -625,7 +631,7 @@ function tb_get_meta_val   () {
 	   else                               str="NULL"
 	   fi
 	fi   
-    echo "$str" | tr -d '\r'
+    echo $str | tr -d '\r'
 } 
 function tb_meta_info () {
 	local db="$1";shift;local tb=$@;local del="";local del2="";local del3="";local line=""
