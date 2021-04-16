@@ -1042,6 +1042,24 @@ function func_init () {
 	export d2s="func_date2stamp"
 	export w2linux="func_translate -i ':\,\' -o '/,/' /"
 }
+save_geometry (){
+	str=$*;window=${str%\#*};gfile=${str#*\#}
+	XWININFO=$(xwininfo -stats -name "$window")
+	if [ "$?" -ne "0" ];then func_setmsg -i "error XWINFO";return  ;fi
+	HEIGHT=$(echo "$XWININFO" | grep 'Height:' | awk '{print $2}')
+	WIDTH=$(echo "$XWININFO" | grep 'Width:' | awk '{print $2}')
+	X1=$(echo "$XWININFO" | grep 'Absolute upper-left X' | awk '{print $4}')
+	Y1=$(echo "$XWININFO" | grep 'Absolute upper-left Y' | awk '{print $4}')
+	X2=$(echo "$XWININFO" | grep 'Relative upper-left X' | awk '{print $4}')
+	Y2=$(echo "$XWININFO" | grep 'Relative upper-left Y' | awk '{print $4}')
+	X=$(($X1-$X2))
+	Y=$(($Y1-$Y2))
+	echo "HEIGHT=$HEIGHT"  >  "$gfile"
+	echo "WIDTH=$WIDTH"    >> "$gfile"
+	echo "X=$X"            >> "$gfile"
+	echo "SY=$Y"            >> "$gfile"
+	chmod 700 "$gfile"
+}
 trap_init
 #func_init
 #export -f log
