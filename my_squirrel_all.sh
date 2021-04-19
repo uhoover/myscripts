@@ -11,11 +11,188 @@ function axit() {
 	retcode=0 
   	if [ "$cmd" = "" ]; then log stop;fi
 }
-function ftest() { log debug $FUNCNAME; }
-function amain () {
-	log file   
+function ftest_db_ctrl () {
+	erg=$(ftest_parms $*)
+	IFS="|";arr=($erg);unset IFS
+	if [ "${#arr[@]}" -lt "1" ];then setmsg -i "keine gueltigen Parameter";return 1 ;fi
+	notebook="";for arg in ${arr[@]};do notebook="$notebook ${arg%%#*}";done
+    xmlfile="$tpath/xml_$(echo $notebook | tr ' ' '_').xml"
+    geometryfile="$tpath/geometry_$(echo $notebook | tr ' ' '_').txt"
+	echo "<window title=\"$wtitle\">" > $xmlfile
+	echo "<notebook show-tabs=\"$visible\"  tab-labels=\""$(echo $notebook | tr '_ ' "-|")"\">" >> $xmlfile
+	IFS='#'
+	for arg in "${arr[@]}" ;do
+		set -- $arg 
+ 		echo "label $1 db $2 tb $3" >> "$xmlfile";continue
+ 		log debug  $FUNCNAME $LINENO $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
+		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
+	done
+	unset IFS
+	echo "</notebook></window>" >> $xmlfile
+}
+function ftest_read_table() {
+	label="$1";db=$2;tb=$3
+	db=$(ftest_get_dflt_db $db);if [ "$?" -gt "0" ];then echo error db;return 1;fi
+	tb=$(ftest_get_dflt_tb $label $db $tb);if [ "$?" -gt "0" ];then echo error tb;return 1;fi
+	sql_read_table $label $db $tb
+}
+function ftest_get_dflt_db() {
+	if [ "$*"      != "" ];then echo $*;return;fi
+	if [ "$dfltdb" != "" ];then echo $dfltdb;return;fi
+	db=$(get_fileselect);if [ "$?" -gt "0" ];then return 1;fi
+	echo $db
+}
+function ftest_get_table_list() {
+	label=$1;db="$2"
+	if [ "$db" = "" ];then db=$(ftest_get_dflt_db);fi
+	if [ "$?" -gt "0" ];then return 1;fi
+	tb=$(ftest_get_dflt_tb $label $db)
+	if [ "$tb" = "" ];then x_get_tables $db;return  ;fi
+	echo $tb
+	x_get_tables $db | grep -v $tb
+}
+function ftest_get_dflt_tb() {
+	label=$1;db="$2";tb=$3
+	if [ "$tb" != "" ];then echo $tb;return;fi
+	eval 'tb=$'$(get_field_name "$db")'dflttb'$label
+	if [ "$tb" != "" ];then echo $tb;return;fi
+	tb=$(x_get_tables "$db" "batch"| head -n1)
+	if [ "$?" -gt "0" ];then return 1;fi
+	echo $tb
+}
+function ftest_parms() {
+	log debug $FUNCNAME $@  
+	arr="";del="" 
+	while [ "$#" -gt "0" ];do
+		if   [ -f  "$1" ];then
+			db=$1;sql_execute "$db" ".databases" > /dev/null
+			if [ "$?" -gt "0" ];then setmsg -i "$db ist keine sqlite db";db="none";shift;continue;fi
+			x_get_tables "$db" > $tmpf 
+			if [ "$2" = "" ] || [ -f  "$2" ]; then 
+				dblabel=$(basename $db);tblabel=${dblabel%%\.*}
+				arr="$arr$del$tblabel#$db#$(ftest_get_dflt_tb $tblabel $db)";del="|"
+			fi	
+		elif [ "$1" = "--all" ];then	
+			if [ "$db" = "none" ];then continue  ;fi
+			while read -r tb;do 
+				arr="$arr$del$tb#$db#$tb";del="|"
+			done < $tmpf
+		else 
+			if [ "$db" = "none" ];then continue  ;fi
+			erg=$(grep -w "$1" $tmpf)
+			if [ "$erg" = "" ];then setmsg -i "$1 ist keine sqlite tabell";shift;continue;fi
+			arr="$arr$del$1#$db#$1";del="|"
+		fi
+	    shift		
+	done
+	if [ "$notable" != "$true" ];then 
+		db=$(ftest_get_dflt_db)
+		if [ "$?" -gt "0" ];then 
+			setmsg -i "$db keine (gueltige )sqlite db"
+		else
+			arr="$arr${del}selectDB#$db#$(ftest_get_dflt_tb selectDB $db)" 			
+		fi
+	fi
+	echo $arr
+}
+function ftest_get_xml() { 
+	log debug $FUNCNAME
+	export MAIN_DIALOG='
+	<notebook show-tabs="true" space-expands="true" tab-labels="selectDB|music">
+	<vbox>
+		<tree headers_visible="true" hover_selection="false" hover_expand="true" exported_column="0">
+			<label>|||||||||||||||||||</label>
+			<variable>TREE</variable>
+			<input>'$script' --func ftest_read_table selectDB $entrydbselect $CBOXENTRYdbselect</input>
+		</tree>	
+		<hbox homogenoues="true">
+		   <hbox>
+			<entry space-fill="true" space-expand="true">  
+				<variable>entrydbselect</variable> 
+				<sensitive>false</sensitive>  
+				<input>'$script' --func ftest_get_dflt_db</input> 
+				<action type="refresh">CBOXENTRYdbselect</action>	
+			</entry> 
+			<button space-fill="false">
+            	<variable>buttonfselect</variable>
+            	<input file stock="gtk-open"></input>
+            	<action>/home/uwe/my_scripts/my_squirrel_all.sh --func setconfig selectDB $(zenity --file-selection --filename="'$searchpath'")</action>
+            	<action type="refresh">entrydbselect</action>	
+            </button> 
+           </hbox>
+            <comboboxtext space-expand="true" space-fill="true" allow-empty="false">
+				<variable>CBOXENTRYdbselect</variable>
+				<input>'$script' --func ftest_get_table_list selectDB $entrydbselect</input>
+				<action type="clear">TREE</action>
+				<action type="refresh">TREE</action>
+			</comboboxtext>	
+		</hbox>
+		<hbox>
+			<button ok></button>
+			<button cancel></button>
+		</hbox>
+	</vbox> 
+	<vbox>
+		<tree headers_visible="true" autorefresh="true" hover_selection="false" hover_expand="true" exported_column="0">
+			<label>|||||||||||||||||||</label>
+			<variable>TREEmusic</variable>
+			<input>'$script' --func ftest_read_table music $entrymusic $CBOXENTRYmusic</input>
+		</tree>	
+		<hbox homogenoues="true">
+		   <hbox>
+			<entry space-fill="true" space-expand="true">  
+				<variable>entrymusic</variable> 
+				<sensitive>false</sensitive>  
+				<input>'$script' --func ftest_get_dflt_db /home/uwe/my_databases/music.sqlite</input> 
+				<action type="refresh">CBOXENTRYdbselect</action>	
+			</entry> 
+			<button space-fill="false">
+            	<variable>buttonfselectmusic</variable>
+            	<input file stock="gtk-open"></input>
+            	<sensitive>false</sensitive>
+            	<action>/home/uwe/my_scripts/my_squirrel_all.sh --func setconfig selectDB $(zenity --file-selection --filename="'$searchpath'")</action>
+            	<action type="refresh">entrymusic</action>	
+            </button> 
+           </hbox>
+            <comboboxtext space-expand="true" space-fill="true" allow-empty="false">
+				<variable>CBOXENTRYmusic</variable>
+				<input>'$script' --func ftest_get_table_list music $entrymusic</input>
+				<action type="clear">TREEmusic</action>
+				<action type="refresh">TREEmusic</action>
+			</comboboxtext>	
+		</hbox>
+		<hbox>
+			<button ok></button>
+			<button cancel></button>
+		</hbox>
+	</vbox> 
+	</notebook>
+	'
+	gtkdialog -p MAIN_DIALOG --geometry="500x600+200+100"
+}
+function ctrl () {
+	log file 
+	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
+	tpath="$path/tmp"  
+	[ ! -d "$path" ]  && mkdir "$path"  
+	[ ! -d "$path/tmp" ] && mkdir "$path/tmp"  
+	x_configfile="$path/.configrc" 
+	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi  
+ source $x_configfile
+	if [ "$limit" = "$" ];then limit=150  ;fi
+	script=$(readlink -f $0)   
+	changexml="$path/tmp/change.xml" 
+	idfile="$path/tmp/id.txt" 
+	efile="$path/tmp/error.txt" 
+	tmpf="$path/tmp/dialogtmp.txt"
+	tableinfo="$path/tmp/tableinfo.txt"  
+	valuefile="$path/tmp/value.txt"
+	dfile="$path/tmp/table.xml"; 
+	dbparm="$path/parm.sqlite"
+	please_choose="---- please choose "$(copies -c "-" 120);
+	notable=$false;visible="true";parm="";nowidgets="false"  
 	pparms=$*
-	amain_load_parm
+	ctrl_load_parm
 	notable=$false;visible="true";myparm="";nowidgets="false";wtitle="Uwes sqlite dbms";X=400;Y=600
 	while [ "$#" -gt 0 ];do
 		case "$1" in
@@ -44,28 +221,7 @@ function amain () {
 	if [ "$?" != "0" ];then return;fi 
 	gtkdialog -f "$dfile"  -c 1> /dev/null # && geometry="-G +$X+$Y" # geometry laeuft einfach nicht	
 }
- 	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
-	tpath="$path/tmp"  
-	[ ! -d "$path" ]  && mkdir "$path"  
-	[ ! -d "$path/tmp" ] && mkdir "$path/tmp"  
-	x_configfile="$path/.configrc" 
-	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi  
- source $x_configfile
-	if [ "$limit" = "$" ];then limit=150  ;fi
-	script=$(readlink -f $0)   
-	changexml="$path/tmp/change.xml" 
-	idfile="$path/tmp/id.txt" 
-	efile="$path/tmp/error.txt" 
-	tmpf="$path/tmp/dialogtmp.txt"
-	tableinfo="$path/tmp/tableinfo.txt"  
-	valuefile="$path/tmp/value.txt"
-	dfile="$path/tmp/table.xml"; 
-	dbparm="$path/parm.sqlite"
-	cmd_left=50
-	please_choose="---- please choose "$(copies -c "-" 120);
-	notable=$false;visible="true";parm="";nowidgets="false"
- 
-function amain_load_parm() {
+function ctrl_load_parm() {
 	if [ -f $dbparm ];then 
 		table=$(sql_execute $dbparm ".tables parm") ;
 		if [ "$table" = "parm" ];then return  ;fi
@@ -80,7 +236,6 @@ function amain_load_parm() {
 								(null,0,"0	-","status"),(null,1,"1	in Bearneitung","status"),
 								(null,2,"2	ready","status"),(null,9,"9	update-komplete","status"); 
 EOF
-
 }
 function get_ref_parms () { ref="$*";ref2=${ref#*\#};echo ${ref2%%\|*}; }
 function gui_rc_entrys_hbox_cmd () {
@@ -369,7 +524,7 @@ function gui_tb_get_dialog () {
 			<button>
 				<label>clone</label>
 				<variable>BUTTONCLONE'$tb'</variable>
-				<action>'$script' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' --notable</action>
+				<action>'$script' $CBOXDBSEL'$tb' $CBOXENTRY'$tb' --notable &</action>
 			</button>
 			<button>
 				<label>insert</label>
@@ -434,10 +589,12 @@ function setconfig_file () {
 }
 function setconfig () {
 	label=$1;shift;db=$1;shift;tb=$1;shift;where="$*"
+#	setmsg -i "$label\n$db"
 	if 		[ "$label" =  "selectDB" ]; then
 			setconfig_file "dfltdb" "$db" "-" "default-datenbank fuer dbselect (label=selectDB)"
 			field=$(get_field_name $db)
 	fi
+	if 		[ "$tb" = "" ];then return;fi
 	if 		[ "$label" != "$tb" ]; then
 			setconfig_file "$(get_field_name $db)dflttb$label"    "$tb"    "-" "default-tabelle fuer tbselect (label=$label)"
 	fi
@@ -468,7 +625,7 @@ function x_get_tables () {
 	log debug $FUNCNAME $* 
  	if [ "$1" = "" ];then  return ;fi
 	if [ -d "$1" ];then setmsg "$1 ist ein Ordner\nBitte sqlite_db ausaehlen" ;return ;fi
-	sql_execute "$1" '.tables' | fmt -w 2
+	sql_execute "$1" '.tables' | fmt -w 2 | grep -v -e '^$'  
 	if [ "$?" -gt "0" ];then return 1;fi
 }
 function sql_rc_ctrl () {
@@ -550,11 +707,13 @@ function sql_execute () { func_sql_execute $*; }
 function sql_read_table ()  {
 	log debug $FUNCNAME $@
 	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
-	erg=$(tb_meta_info $db $tb);row=${erg%%@*};if [ "$row" == "rowid" ];then srow="rowid," ;else srow="";fi
 	if [ "$label" = "$tb" ];then off="off" ;else off="on"  ;fi
+	if [ "$db" = "" ];then db=$(get_fileselect);fi
 	if [ "$db" = "" ];then setmsg -n --width=400 " sql_read_table\n label $label\n bitte datenbank selektieren\n $*" ;return  ;fi
+	if [ "$tb" = "" ];then tb=$(x_get_tables "$db" "batch"| head -n1);fi
 	if [ "$tb" = "" ];then setmsg -n --width=400 " sql_read_table\n label $label\n keine tabelle uebergeben\n $*" ;return  ;fi
-	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;" | tee $path/tmp/export_${tb}_$(date "+%Y%m%d%H%M").txt 
+	erg=$(tb_meta_info $db $tb);row=${erg%%@*};if [ "$row" == "rowid" ];then srow="rowid," ;else srow="";fi
+	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;" # | tee $path/tmp/export_${tb}_$(date "+%Y%m%d%H%M").txt 
 	if [ "$?" -gt "0" ];then return ;fi 
 	setconfig "$label" "$db" "$tb" "$where" 
 }
@@ -650,11 +809,7 @@ function tb_meta_info () {
 	if [ "$?" -gt "0" ];then return ;fi
 	while read -r line;do
 		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
-		TNAME=$TNAME$del"${arr[1]}"	
-		TTYPE=$TTYPE$del"${arr[2]}"	
-		TNOTN=$TNOTN$del"${arr[3]}"	
-		TDFLT=$TDFLT$del"${arr[4]}"	
-		TPKEY=$TPKEY$del"${arr[5]}"
+		TNAME=$TNAME$del"${arr[1]}";TTYPE=$TTYPE$del"${arr[2]}";TNOTN=$TNOTN$del"${arr[3]}";TDFLT=$TDFLT$del"${arr[4]}";TPKEY=$TPKEY$del"${arr[5]}"
 		TLINE=$TLINE$del2"${arr[2]},${arr[3]},${arr[4]},${arr[5]}"
 		if [ "${arr[5]}" = "1" ] ;then
 			PRIMKEY="${arr[1]}";export ID=$ip;  
@@ -682,4 +837,4 @@ function x_read_csv () {
 	sql_execute $dbparm "select * from tmpcsv" > "$file"
 }
 function zz () { return; } 
-	amain $*
+	ctrl $*
