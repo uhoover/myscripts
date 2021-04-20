@@ -20,15 +20,36 @@ function ftest_db_ctrl () {
     geometryfile="$tpath/geometry_$(echo $notebook | tr ' ' '_').txt"
 	echo "<window title=\"$wtitle\">" > $xmlfile
 	echo "<notebook show-tabs=\"$visible\"  tab-labels=\""$(echo $notebook | tr '_ ' "-|")"\">" >> $xmlfile
-	IFS='#'
 	for arg in "${arr[@]}" ;do
-		set -- $arg 
- 		echo "label $1 db $2 tb $3" >> "$xmlfile";continue
- 		log debug  $FUNCNAME $LINENO $(printf "labels %-10s %-40s %-15s %-5s %-5s %s\n" $1 $2 $3 $4 $5 "$(echo ${@:6})")
-		gui_tb_get_dialog $1 $2 $3 $4 $5 "$(echo ${@:6})" >> $dfile
+		IFS='#';set -- $arg;unset IFS 
+ 		log debug "label $1 db $2 tb $3"  
+ 		ftest_get_xml "$1" "$2" "$3" >> $xmlfile 
 	done
 	unset IFS
 	echo "</notebook></window>" >> $xmlfile
+	X=10;Y=10;HEIGHT=800;WIDTH=900
+    [ -f "$geometryfile" ] && source "$geometryfile" 
+    geometry="$WIDTH""x""$HEIGHT""+""$X""+""$Y"
+    gtkdialog -f "$xmlfile" --geometry="$geometry"
+}
+function ftest_tb_meta_info () {
+	db="$1";tb="$2";local del="";local del2="";local del3="";local line=""
+	TNAME="" ;TTYPE="" ;TNOTN="" ;TDFLT="" ;TPKEY="";TMETA="";TSELECT="";local ip=-1;local pk="-"
+	sql_execute "$db" ".header off\nPRAGMA table_info($tb);"   > $tableinfo
+	if [ "$?" -gt "0" ];then return 1;fi
+	while read -r line;do
+		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
+		TNAME=$TNAME$del"${arr[1]}";TTYPE=$TTYPE$del"${arr[2]}";TNOTN=$TNOTN$del"${arr[3]}"
+		TDFLT=$TDFLT$del"${arr[4]}";TPKEY=$TPKEY$del"${arr[5]}"
+		TMETA=$TMETA$del2"${arr[2]},${arr[3]},${arr[4]},${arr[5]}"
+		if [ "${arr[5]}" = "1" ] ;then
+			PRIMKEY="${arr[1]}";export ID=$ip;  
+		else
+			TSELECT=$TSELECT$del3$"${arr[1]}";del3=","	
+		fi
+		del=",";del2='|'
+	done < $tableinfo
+	if [ "$PRIMKEY" = "" ];then PRIMKEY="rowid";ID=0;TNAME="rowid$del$TNAME";TMETA="rowid$del2$TMETA"  ;fi 
 }
 function ftest_read_table() {
 	label="$1";db=$2;tb=$3
@@ -43,8 +64,9 @@ function ftest_get_dflt_db() {
 	echo $db
 }
 function ftest_get_table_list() {
-	label=$1;db="$2"
-	if [ "$db" = "" ];then db=$(ftest_get_dflt_db);fi
+	label=$1;db="$2";tb="$3"
+	if [ "$tb" != "" ];then echo "$tb";return;fi
+	if [ "$db"  = "" ];then db=$(ftest_get_dflt_db);fi
 	if [ "$?" -gt "0" ];then return 1;fi
 	tb=$(ftest_get_dflt_tb $label $db)
 	if [ "$tb" = "" ];then x_get_tables $db;return  ;fi
@@ -54,11 +76,30 @@ function ftest_get_table_list() {
 function ftest_get_dflt_tb() {
 	label=$1;db="$2";tb=$3
 	if [ "$tb" != "" ];then echo $tb;return;fi
-	eval 'tb=$'$(get_field_name "$db")'dflttb'$label
+	dblabel=$(basename $db);tblabel=${dblabel%%\.*}
+	if [ "$label" != "$tblabel" ] && [ "$label" != "selectDB" ] ; then
+		tb=$label
+	else
+		eval 'tb=$'$(get_field_name "$db")'dflttb'$label
+	fi
 	if [ "$tb" != "" ];then echo $tb;return;fi
 	tb=$(x_get_tables "$db" "batch"| head -n1)
 	if [ "$?" -gt "0" ];then return 1;fi
 	echo $tb
+}
+function ftest_get_dflt_where() {
+	label=$1;shift;db="$1";shift;tb=$1;shift;where=$*
+	if [ "$where" != "" ];then echo $where;return;fi
+	dblabel=$(basename $db);tblabel=${dblabel%%\.*}
+	if [ "$tb" = "" ];then 
+		if [ "$label" != "$tblabel" ] && [ "$label" != "selectDB" ] ; then
+			tb=$label
+		else
+			eval 'tb=$'$(get_field_name "$db")'dflttb'$label
+		fi
+		eval 'where=$'$(get_field_name "$db")'dfltwhere'$tb$label
+	fi
+	echo $where
 }
 function ftest_parms() {
 	log debug $FUNCNAME $@  
@@ -95,7 +136,58 @@ function ftest_parms() {
 	fi
 	echo $arr
 }
-function ftest_get_xml() { 
+function ftest_get_xml() {
+	log debug $FUNCNAME
+	label="$1";db="$2";tb="$3"
+	ftest_tb_meta_info "$db" "$tb" #			<input>'$script' --func ftest_read_table '$label' $ENTRY'$label' $CBOXTB'$label'</input>
+
+	if [ "$label" = "$tb" ]; then
+		lb=$(echo $TNAME | tr '_,' '-|');CBOXtb=$tb;treecbox=$tb;sensitiveCBOX="false"
+	else
+		lb=$(copies 30 '|');CBOXtb="";treecbox='$CBOXTB'$label;sensitiveCBOX="true"
+	fi
+	if [ "$label" = "selectDB" ]; then
+	    sensitiveFSELECT="true";CBOXdb='$ENTRY'$label;treeeentry='$ENTRY'$label
+	else
+	    sensitiveFSELECT="false";CBOXdb=$db;treeentry=$db
+	fi
+	echo '    <vbox>
+		<tree headers_visible="true" hover_selection="false" hover_expand="true" exported_column="'$ID'">
+			<label>"'$lb'"</label>
+			<variable>TREE'$label'</variable>
+			<input>'$script' --func ftest_read_table '$label' '$CBOXdb' '$treecbox'</input>
+		</tree>	
+		<hbox homogenoues="true">
+		   <hbox>
+			<entry space-fill="true" space-expand="true">  
+				<variable>ENTRY'$label'</variable> 
+				<sensitive>false</sensitive>  
+				<input>'$script' --func ftest_get_dflt_db</input> 
+				<action type="refresh">CBOXTB'$label'</action>	
+			</entry> 
+			<button space-fill="false">
+            	<variable>BUTTONFSELECT'$label'</variable>
+            	<sensitive>'$sensitiveFSELECT'</sensitive>
+            	<input file stock="gtk-open"></input>
+            	<action>/home/uwe/my_scripts/my_squirrel_all.sh --func setconfig '$label' $(zenity --file-selection --filename="'$searchpath'")</action>
+            	<action type="refresh">ENTRY'$label'</action>	
+            </button> 
+           </hbox>
+            <comboboxtext space-expand="true" space-fill="true" allow-empty="false">
+				<variable>CBOXTB'$label'</variable>
+				<sensitive>'$sensitiveCBOX'</sensitive>
+				<input>'$script' --func ftest_get_table_list '$label' "'$CBOXdb'" '$CBOXtb'</input>
+				<action type="clear">TREE'$label'</action>
+				<action type="refresh">TREE'$label'</action>
+			</comboboxtext>	
+		</hbox>
+		<hbox>
+			<button ok></button>
+			<button cancel></button>
+		</hbox>
+	</vbox>'
+} 
+function ftest_get_xml_old() { 
 	log debug $FUNCNAME
 	export MAIN_DIALOG='
 	<notebook show-tabs="true" space-expands="true" tab-labels="selectDB|music">
@@ -694,7 +786,7 @@ function sql_rc_delete () {
 	setmsg -z "$PRIMKEY=$id wirklich loeschen ?"
 	if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
 	erg=$(sql_execute $"$db" "delete from $tb where $PRIMKEY = $ID;")  
-	[ "$erg" == "" ] && erg="delete erfolgreich" && setmsg $erg
+	[ "$erg" = "" ] && erg="delete erfolgreich" && setmsg $erg
 	erg=$(sql_execute $"$db" "select min($PRIMKEY) from $tb;")
 	if [ "$?" -gt "0" ];then return ;fi
 	if [ "$erg" -lt "$ID" ]; then
