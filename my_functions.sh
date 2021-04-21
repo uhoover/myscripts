@@ -145,6 +145,7 @@ function func_log_logfile() {
 	echo "$logfile"
 }
 function log() {
+	set +x;oldstate="$(set +o)"
 	ohnevorschub=0
 	if [ $# -lt 1 ];then func_log " ";return;fi  
 	stopit=0;debug=0
@@ -175,7 +176,8 @@ function log() {
 	    fi
 	done
 	if [ ${#args} -gt 0 ];then func_log "$args";fi  
-	if [ $stopit  -gt 0 ];then verbose_on=0;func_end;        fi  
+	if [ $stopit  -gt 0 ];then verbose_on=0;func_end;fi  
+	eval "$oldstate"
 }
 function func_log() {                
     if [ "$debug"  -gt  0 ] && [ "$debug_on"  -lt  1 ]; then return;fi
