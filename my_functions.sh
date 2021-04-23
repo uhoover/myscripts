@@ -20,6 +20,7 @@
         declare -t debug_on=0
 		declare -t verbose_on=0
 		declare -t sqlerror="/tmp/sqlerror.txt"
+		declare -t music="$HOME/my_databases/music.sqlite"
 		export MYPATH="$HOME/my_scripts"
 function func_help () {
     [ $# -gt 1 ] && echo "         Wert unzulaessig: $2"
@@ -1059,7 +1060,7 @@ save_geometry (){
 	echo "HEIGHT=$HEIGHT"  >  "$gfile"
 	echo "WIDTH=$WIDTH"    >> "$gfile"
 	echo "X=$X"            >> "$gfile"
-	echo "SY=$Y"            >> "$gfile"
+	echo "SY=$Y"           >> "$gfile"
 	chmod 700 "$gfile"
 }
 trap_init
