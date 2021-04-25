@@ -170,7 +170,7 @@ function tb_gui_get_xml() {
 			<label>"'$lb'"</label>
 			<variable>TREE'$label'</variable>
 			<input>'$script' --func ctrl_tb_gui tree      '$label' '$db' '$tb' $ENTRY'$label' $CBOXTB'$label' $CBOXWHERE'$label'</input>
-			<action>'$script' '$nocSmd' --func sql_rc_ctrl $TREE'$label' $ENTRY'$label' $CBOXTB'$label'</action>	
+			<action>'$script' '$nocSmd' --func ctrl_rc $TREE'$label' $ENTRY'$label' $CBOXTB'$label'</action>	
 		</tree>	
 		<hbox homogenoues="true">
 		  <hbox>
@@ -276,7 +276,11 @@ function tb_meta_info () {
 		fi
 		del=",";del2='|'
 	done < $tableinfo
-	if [ "$PRIMKEY" = "" ];then PRIMKEY="rowid";ID=0;TNAME="rowid$del$TNAME";TMETA="rowid$del2$TMETA"  ;fi 
+	if [ "$PRIMKEY" = "" ];then 
+		PRIMKEY="rowid";ID=0
+		TNAME="rowid$del$TNAME";TTYPE="Integer$del$TTYPE";TNOTN="1$del$TNOTN";
+		TDFLT="' '$del$TDFLT";TPKEY="1$del$TPKEY";TMETA="rowid$del2$TMETA"
+	fi 
 }
 function tb_read_table() {
 	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
@@ -291,8 +295,190 @@ function tb_get_where_list () {
 	cmd="grep \"^dummy=\" $x_configfile | grep \"# $1 $2\" | cut -d '\"' -f2"
 	bash -c "$cmd"
 }
+function ctrl_rc () {
+	log $FUNCNAME $*
+	if [ "$#" -gt "3" ];then setmsg -w  " $#: zu viele Parameter\n tabelle ohne PRIMKEY?" ;return  ;fi
+	row="$1";shift;db="$1";shift;tb="$@"
+	tb_meta_info "$db" "$tb"
+	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME\nerror Meta-Info\n$db\n$tb";return ;fi
+	if [ "$row" = "insert" ]; then
+		echo "" > "$valuefile" 
+	else
+		sql_rc_sql_execute $db $tb eq $PRIMKEY $row > "$valuefile"
+	fi
+    row_change_xml="$path/tmp/change_row_${tb}.xml"	
+    rc_gui_get_xml $db $tb $row  > "$row_change_xml"	
+ 	gtkdialog -f "$row_change_xml" & # 2> /dev/null  
+}
+function ctrl_rc_gui () {
+	log $FUNCNAME $@
+	pparm=$*;IFS="|";parm=($pparm);unset IFS 
+	func=$(trim ${parm[0]});db=$(trim ${parm[1]});tb=$(trim ${parm[2]});field=$(trim ${parm[3]});key=$(trim ${parm[4]});values=$(trim ${parm[@]:5})
+#	setmsg -i --width=400 "func #$func#\ndb #$db#\ntb #$tb#\nfield #$field#\nrvalues #${values}#"
+	tb_meta_info "$db" "$tb"
+	[ "$?" -gt "0" ] && setmsg -i "$FUNCNAME\nerror meta-info\n$db\$tb" && return
+	IFS=',';name=($TNAME);notn=($TNOTN);ndflt=($TDFLT);unset IFS
+	case $func in
+		 "entry")   		str=$(grep "$field" "$valuefile");value="${str#*\= }" 
+							if [ "$value" != ""  ];then echo $(trim $value | tr -d '"');return;fi
+							if [ -f "$valuefile" ];then echo '';return;fi
+							IFS=',';meta=$(trim ${parm[5]});unset IFS
+							if [ "$field" = "$PRIMKEY" ]; then 
+								value=$(grep "$field" "$valuefile.bak");echo "${value#*\= }";return 
+							fi 	 
+							if   [ "${meta[2]}" != "" ]; then  echo "${meta[2]}"  
+							elif [ "${meta[1]}" != "0" ];then  echo "="  
+							else                               echo "null"
+							fi
+							;;	 
+		 "button_back")   	rc_sql_execute "$db" "$tb" "lt" 	"$field" "$key" ;;
+		 "button_next")   	rc_sql_execute "$db" "$tb" "gt" 	"$field" "$key" ;;
+		 "button_read")   	rc_sql_execute "$db" "$tb" "eq" 	"$field" "$key" ;;
+		 "button_insert")   rc_sql_execute "$db" "$tb" "insert" "$field" "$key" "$values" ;;
+		 "button_update")   rc_sql_execute "$db" "$tb" "update" "$field" "$key" "$values" ;;
+		 "button_delete")   setmsg -q "$field=$key wirklich loeschen ?"
+							if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
+							rc_sql_execute "$db" "$tb" "delete" "$field" "$key"  
+							if [ $? -gt 0 ];then return  ;fi
+							rc_sql_execute "$db" "$tb" "lt" "$field" "$key"  
+							if [ $? -lt 1 ];then return  ;fi
+							rc_sql_execute "$db" "$tb" "lt" "$field" "$key" 
+							;;
+		 "button_clear")   	if [ -f "$valuefile" ];then rm -f "$valuefile";fi ;;
+		 "button_refresh")  cp -f "$valuefile.bak" "$valuefile" ;;
+		*) setmsg -i -d --width=400 "func $func\ndb $db\ntb $tb\n$field\nrest $rest "
+	esac
+}
+function rc_gui_get_xml () {
+	log debug "$FUNCNAME ID $ID $@"
+	db="$1";shift;tb="$1";shift;key="$1"
+	sizetlabel=20;sizemeta=36;ref_entry=""
+	eval 'cmd_ref=$'$(get_field_name $db$tb"_ref")
+    eval 'cmd_fsl=$'$(get_field_name $db$tb"_fsl")
+    eval 'cmd_bln=$'$(get_field_name $db$tb"_bln")
+    IFS=",";name=($TNAME);unset IFS;IFS="|";meta=($TMETA);unset IFS
+	echo '<vbox>'
+	echo '	<vbox>'
+	echo '		<hbox>'
+	echo '			<entry width_chars="'$sizemeta'" space-expand="false">'
+	echo '				<variable>entryp</variable>'
+	echo '				<input>'$script' --func ctrl_rc_gui "entry | '$db '|' $tb '|' ${PRIMKEY} '|' ${meta[$ID]}'"</input>'
+	echo '			</entry>'
+	echo '			<text width-chars="46" justify="3"><label>'$PRIMKEY' (PK) (type,null,default,primkey)</label></text>'
+	echo '		</hbox>'
+	echo '	</vbox>'
+#	echo '  <frame>'
+	echo '  <vbox hscrollbar-policy="0">'
+    entrys="";del=""
+   	for ((ia=0;ia<${#name[@]};ia++)) ;do
+		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
+		if [ "${name[$ia]}" = "rowid" ];then continue ;fi
+		cmd=$(rc_gui_get_cmd "$db" "$tb" "${name[$ia]}")
+		echo    '	<hbox>' 
+		IFS='#';set -- $cmd;unset IFS
+		if  [ "$1" = "" ] || [ "$1" = "fileselect" ]; then 
+			echo    ' 			<entry width_chars="'$sizemeta'"  space-fill="true">'  
+			echo    ' 				<variable>entry'$ia'</variable>' 
+			echo    ' 				<sensitive>true</sensitive>' 
+			echo    ' 				<input>'$script' --func ctrl_rc_gui "entry  | '$db '|' $tb '|' ${name[$ia]} '|' ${meta[$ia]}'"</input>' 
+			echo    ' 			</entry>' 
+		fi
+		entrys="${entrys}${del}"'$entry'"$ia";del="#"
+		if [ "$1" = "fileselect" ]; then 
+		    ref_entry="$ref_entry $ia"'_'"$ia" 
+		    if [ "$3" = "play" ]; then
+		    echo	'	        <button>'
+			echo	'				<variable>entry'$ia'_'$ia'_'$ia'</variable>'
+			echo	'				<input file stock="gtk-media-play"></input>'
+    		echo	' 				<action>'$script' --func ctrl_rc_gui "play   | '$db '|' $tb '|' ${name[$ia]} '|' $cmd'"</action>'
+			echo	'			</button>'
+		    fi
+			echo 	'			<button>'
+            echo	'				<variable>entry'$ia'_'$ia'</variable>'
+            echo	'				<input file stock="gtk-open"></input>'
+            echo    '    			<action>'$script' --func ctrl_rc_gui "fselect | '$db '|' $tb '|' ${name[$ia]} '|' $cmd'"</action>'
+            echo	'    			<action type="refresh">entry'$ia'</action>'	
+            echo	'			</button>' 	
+		fi
+		if 	[ "$1" = "reference" ] || [ "$1" = "parm" ] ;then 
+		    ref_entry="$ref_entry $ia""_""$ia"
+		    if [ "$2" = "-" ];then mydb=$db ;else mydb=$2 ;fi 
+		    if [ "$3" = "-" ];then mytb=$tb ;else mytb=$3 ;fi 
+			echo    ' 			<entry width_chars="5"  space-fill="true">'  
+			echo    ' 				<variable>entry'$ia'</variable>' 
+			echo    ' 				<sensitive>false</sensitive>' 
+			echo    ' 				<input>'$script' --func ctrl_rc_gui   "entry   | '$db '|' $tb '|' ${name[$ia]}'"</input>' 
+			echo    ' 			</entry>' 
+            echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true" allow-empty="false" visible="true">'
+			echo 	' 				<variable>entry'$ia'_'$ia'</variable>'
+			echo  	' 				<sensitive>true</sensitive>'
+			echo  	' 		    	<input>'$script'  --func ctrl_rc_gui  "cbox_i  | '$db '|' $tb '|' ${name[$ia]} '|' $cmd'"</input>'
+			echo  	'               <action>'$script' --func ctrl_rc_gui  "vbox_a  | '$db '|' $tb '|' ${name[$ia]} '|' $cmd' | $entry'$ia'_'$ia'"</action>'
+			echo  	'               <action type="refresh">entry'$ia'</action>'
+			echo  	'       	</comboboxtext>'
+		fi
+		if 	[ "$1" = "cmd" ] ;then echo ${@:2};fi 
+		echo  	' 			<text width-chars="'$sizemeta'" justify="2"><label>'${name[$ia]}' ('${meta[$ia]}')</label></text>'   
+		echo    '	</hbox>' 
+	done
+	echo '	</vbox>'
+#	echo '  </frame>'
+	echo '	<hbox>'
+	echo '		<button><label>back</label>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_back    | '$db '|' $tb '|' $PRIMKEY '| $entryp"</action>'
+			        rc_entrys_refresh  
+	echo '		</button>'
+	echo '		<button><label>next</label>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_next    | '$db '|' $tb '|' $PRIMKEY '| $entryp"</action>'
+			        rc_entrys_refresh  
+    echo '		</button>'
+	echo '		<button><label>read</label>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_read    | '$db '|' $tb '|' $PRIMKEY '| $entryp"</action>'
+	echo '			<action type="enable">BUTTONAENDERN</action>'
+					rc_entrys_refresh  
+	echo '		</button>'
+	echo '		<button><label>insert</label>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_insert  | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
+					rc_entrys_refresh  
+	echo '		</button>'
+	echo '		<button><label>update</label><variable>BUTTONUPDATE</variable>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_update  | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
+					rc_entrys_refresh  
+	echo '		</button>'
+	echo '		<button><label>delete</label>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_delete  | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
+					rc_entrys_refresh 
+	echo '		</button>'
+	echo '		<button><label>clear</label>'
+	echo '			<action type="enable">BUTTONUPDATE</action>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_clear   | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
+					rc_entrys_refresh  
+	echo '		</button>'
+	echo '		<button><label>refresh</label>'
+	echo '			<variable>BUTTONREFRESH</variable>'
+	echo '			<action type="enable">BUTTONAENDERN</action>'
+	echo '			<action>'$script' --func ctrl_rc_gui "button_refresh | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
+					rc_entrys_refresh  
+	echo '		</button>'
+	echo '		<button ok></button><button cancel></button>'
+	echo '	</hbox>'
+	echo '</vbox>'  
+}
+function rc_entrys_refresh () {
+	log debug $FUNCNAME $@
+	IFS=",";name=($TNAME);unset IFS;shift;IFS="|";meta=($TMETA);unset IFS
+	for ((ia=0;ia<${#name[@]};ia++)) ;do
+		if [ ""${name[$ia ]}"" = "$PRIMKEY" ];then continue ;fi
+		if [ ""${name[$ia ]}"" = "rowid" ];then continue ;fi
+		echo '				<action type="refresh">entry'$ia'</action>'  
+	done
+	for entry in $ref_entry; do 
+		echo '				<action type="refresh">entry'$entry'</action>' 
+	done
+	echo '				<action type="refresh">entryp</action>'
+}
 function get_ref_parms () { ref="$*";ref2=${ref#*\#};echo ${ref2%%\|*}; }
-function gui_rc_entrys_hbox_cmd () {
+function rc_gui_get_cmd () {
 	if [ "$nowidgets" = "true" ];then echo "";return  ;fi
 	db=$1;tb=$2;field="$3"
 	eval 'cmd=$'$(get_field_name $db)$tb$field;if [ "$cmd" != "" ];then echo "cmd $cmd";return ;fi
@@ -316,15 +502,52 @@ function gui_rc_entrys_hbox_cmd () {
 		ref_*|reference_*) 	field=${field#*_};tb=${field%%_*};echo "reference#$db#$tb#$field#0";return		;;
 	esac
 }
-function gui_rc_entrys_hbox () {
-	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+function rc_sql_execute () {
+	log debug $FUNCNAME $@
+	db=$1;shift;tb=$1;shift;local mode=$1;shift;PRIMKEY=$1;shift;row=$1;shift	
+	if [ "$mode" = "update" ] || [ "$mode" = "insert" ];		then 
+	     parm=$*;IFS='#';values=($parm);unset IFS
+	     ia=-1;uline="";iline="";vline="";del=""
+	     while read -r line;do
+			field=$(trim "${line%%\ *}");value=$(trim "${line##*\ }" | tr -d '"')
+			if [ "$field" = "$PRIMKEY" ];then continue ;fi
+			ia=$((ia+1))
+			uline="$uline$del$field"' = "'"${values[$ia]}"'"'
+			iline="$iline$del$field"
+			vline="$vline$del"'"'"${values[$ia]}"'"'
+			del=","
+	     done < "$valuefile"
+	fi
+	if [ "$mode" = "eq" ];		then where="where $PRIMKEY = $row ;";fi
+	if [ "$mode" = "delete" ];	then where="where $PRIMKEY = $row ;";fi
+	if [ "$mode" = "update" ];	then where="where $PRIMKEY = $row ;";fi
+	if [ "$mode" = "lt" ];		then where="where $PRIMKEY < $row order by $PRIMKEY desc limit 1;";fi
+	if [ "$mode" = "gt" ];		then where="where $PRIMKEY > $row order by $PRIMKEY      limit 1;";fi
+	if [ "$PRIMKEY" = "rowid" ];then srow="rowid," ;else srow="";fi
+	case "$mode" in
+		 "delete")	erg=$(sql_execute "$db" "delete from $tb $where");;
+		 "update")	erg=$(sql_execute "$db" "update $tb set "$uline "$where");;
+		 "insert")	erg=$(sql_execute "$db" "insert into $tb (${iline}) values (${vline}))";;
+		  *)  		erg=$(sql_execute "$db" ".mode line\n.header off\nselect ${srow}* from $tb $where")
+	esac
+	if [ "$?" -gt "0" ];		then return 1;fi
+	if [ "$mode" = "delete" ];	then setmsg -n "success delete";return  ;fi
+	if [ "$mode" = "insert" ];	then setmsg -n "success insert";return  ;fi
+	if [ "$mode" = "update" ];	then setmsg -n "success update";return  ;fi
+	if [ "$erg" = ""  ];then setmsg "keine id $mode $row gefunden"  ;return 1;fi
+    echo -e "$erg" > "$valuefile"
+    cp -f "$valuefile" "$valuefile.bak"
+}
+function del_gui_rc_entrys_hbox () {
+#	db=$1;shift;tb=$1;shift;PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+ 	db=$1;shift;tb=$1;shift;IFS=",";name=($TNAME);unset IFS;shift;IFS="|";meta=($TMETA);unset IFS
     eval 'cmd_ref=$'$(get_field_name $db$tb"_ref")
     eval 'cmd_fsl=$'$(get_field_name $db$tb"_fsl")
     eval 'cmd_bln=$'$(get_field_name $db$tb"_bln")
    	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
 		if [ "${name[$ia]}" = "rowid" ];then continue ;fi
-		cmd=$(gui_rc_entrys_hbox_cmd "$db" "$tb" "${name[$ia]}")
+		cmd=$(rc_gui_get_cmd "$db" "$tb" "${name[$ia]}")
 		echo    '	<hbox>' 
 		IFS='#';set -- $cmd;unset IFS
 		if  [ "$1" = "" ] || [ "$1" = "fileselect" ]; then 
@@ -384,11 +607,13 @@ function gui_rc_entrys_hbox () {
 		echo    '	</hbox>' 
 	done
 }
-function gui_rc_entrys_action_refresh () {
+function del_gui_rc_entrys_action_refresh () {
 	log debug $FUNCNAME $@
-	PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+#	PRIMKEY=$1;shift;ID=$1;shift;IFS=",";name=($1);unset IFS;shift;IFS="|";meta=($1);unset IFS
+	IFS=",";name=($TNAME);unset IFS;shift;IFS="|";meta=($TMETA);unset IFS
 	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ ""${name[$ia ]}"" == "$PRIMKEY" ];then continue ;fi
+		if [ ""${name[$ia ]}"" == "rowid" ];then continue ;fi
 		echo '				<action type="refresh">entry'$ia'</action>'  
 	done
 	for entry in $ref_entry; do 
@@ -396,9 +621,11 @@ function gui_rc_entrys_action_refresh () {
 	done
 	echo '				<action type="refresh">entryp</action>'
 }
-function gui_rc_entrys_variable_list () {
-	log debug $FUNCNAME $@
-	PRIMKEY="$1";shift;ID="$1";shift;IFS=",";name=($1);unset IFS;shift 
+function del_gui_rc_entrys_variable_list () {
+	log   $FUNCNAME $@
+#	PRIMKEY="$1";shift;ID="$1";shift;IFS=",";name=($1);unset IFS;shift 
+	IFS=",";name=($TNAME);unset IFS 
+	log $(declare -p name);setmsg -i "break"
 	local line="";del=" "
 	for ((ia=1;ia<=${#name[@]};ia++)) ;do
 		if [ "${name[$ia]}" == "$PRIMKEY" ];then continue;fi;
@@ -406,7 +633,7 @@ function gui_rc_entrys_variable_list () {
 	done
 	echo "\"$line\""
 }
-function gui_rc_get_cmd () {
+function del_gui_rc_get_cmd () {
 	db="$1";shift;tb="$1";shift;field="$1";shift;nr="$1" 
 	val=$(tb_get_meta_val $nr)
 	stmt=".mode column\nselect * from $tb where $field  = \"$val\""
@@ -429,10 +656,9 @@ function del_gui_rc_get_ref () {
 	sql_execute $db $stmt | left 50
 	echo "\"---- bitte waehlen --------------------------------------------------------------------------------\""
 }
-function gui_rc_get_dialog () {
-	log $FUNCNAME $@
-	db="$1";shift;tb="$1";shift;row="$1";shift;PRIMKEY="$1";shift;ID="$1";shift
-	TNAMES="$1";shift;TLINE="$1";shift;TNOTN="$1";shift;TSELECT="$1"
+function del_gui_rc_get_dialog () {
+	log debug $FUNCNAME $@
+	db="$1";shift;tb="$1";shift;row="$1"
 	sizetlabel=20;sizemeta=36;ref_entry=""
 	echo '<vbox>'
 	echo '	<vbox>'
@@ -446,44 +672,44 @@ function gui_rc_get_dialog () {
 	echo '	</vbox>'
 	echo '  <frame>'
 	echo '  <vbox height="600" hscrollbar-policy="0">'
-			   gui_rc_entrys_hbox $db $tb $PRIMKEY $ID $TNAMES $TLINE
+			   gui_rc_entrys_hbox $db $tb $PRIMKEY $ID $TNAMES $TMETA
 	echo '	</vbox>'
 	echo '  </frame>'
 	echo '	<hbox>'
 	echo '		<button><label>back</label>'
-	echo '			<action>'$script' --func sql_rc_read '$db' '$tb' lt '$PRIMKEY' $entryp</action>'
-			        gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE
+	echo '			<action>'$script' --func sql_rc_sql_execute '$db' '$tb' lt '$PRIMKEY' $entryp</action>'
+			        gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA
 	echo '		</button>'
 	echo '		<button><label>next</label>'
-	echo '			<action>'$script' --func sql_rc_read '$db' '$tb' gt '$PRIMKEY' $entryp</action>'
-			        gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE
+	echo '			<action>'$script' --func sql_rc_sql_execute '$db' '$tb' gt '$PRIMKEY' $entryp</action>'
+			        gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA
     echo '		</button>'
 	echo '		<button><label>read</label>'
-	echo '			<action>'$script' --func sql_rc_read '$db' '$tb' eq '$PRIMKEY' $entryp</action>'
+	echo '			<action>'$script' --func sql_rc_sql_execute '$db' '$tb' eq '$PRIMKEY' $entryp</action>'
 	echo '			<action type="enable">BUTTONAENDERN</action>'
-					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA 
 	echo '		</button>'
 	echo '		<button><label>insert</label>'
 	echo '			<action>'$script' --func sql_rc_update_insert '$db' '$tb' insert $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>'
-					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA 
 	echo '		</button>'
 	echo '		<button><label>update</label><variable>BUTTONUPDATE</variable>'
 	echo '			<action>'$script' --func sql_rc_update_insert '$db' '$tb' update $entryp '"$PRIMKEY" "$TSELECT" "$TNOTN" $(gui_rc_entrys_variable_list "$PRIMKEY" "$ID" "$TSELECT")'</action>'
 	echo '		</button>'
 	echo '		<button><label>delete</label>'
 	echo '			<action>'$script' --func sql_rc_delete '$db' '$tb' '$PRIMKEY' $entryp</action>'
-					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA 
 	echo '		</button>'
 	echo '		<button><label>clear</label>'
 	echo '			<action type="enable">BUTTONUPDATE</action>'
-	echo '			<action>'$script' --func sql_rc_clear '"$(gui_rc_entrys_variable_list $PRIMKEY $ID $TNAMES $TLINE)"'</action>'
-					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+	echo '			<action>'$script' --func sql_rc_clear '"$(gui_rc_entrys_variable_list $PRIMKEY $ID $TNAMES $TMETA)"'</action>'
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA 
 	echo '		</button>'
 	echo '		<button><label>refresh</label>'
 	echo '			<variable>BUTTONREFRESH</variable>'
 	echo '			<action type="enable">BUTTONAENDERN</action>'
 	echo '			<action>cp -f '"$valuefile.bak" "$valuefile"'</action>'
-					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TLINE 
+					gui_rc_entrys_action_refresh $PRIMKEY $ID $TNAMES $TMETA 
 	echo '		</button>'
 	echo '		<button ok></button><button cancel></button>'
 	echo '	</hbox>'
@@ -549,7 +775,7 @@ function sql_get_where () {
 	cmd="grep \"^dummy=\" $x_configfile | grep \"# $1 $2\" | cut -d '\"' -f2"
 	bash -c "$cmd"
 }
-function sql_rc_read () {
+function sql_rc_sql_execute () {
 	log debug $FUNCNAME $@
 	db=$1;shift;tb=$1;shift;local mode=$1;shift;PRIMKEY=$1;shift;row=$1;
 	if [ "$row" == "NULL" ] || [ "$row" == "" ] || [ "$row" == "=" ];then row=$(cat $idfile);fi
@@ -578,20 +804,21 @@ function sql_rc_ctrl () {
 	row="$1";shift;db="$1";shift;tb="$@"
 	tb_meta_info "$db" "$tb"
 #	PRIMKEY=${marray[0]};ID=${marray[1]}
-#	TNAME=${marray[2]};TTYPE=${marray[3]};TNOTN=${marray[4]};TDFLT=${marray[4]};TLINE=${marray[7]};TSELECT=${marray[8]}
+#	TNAME=${marray[2]};TTYPE=${marray[3]};TNOTN=${marray[4]};TDFLT=${marray[4]};TMETA=${marray[7]};TSELECT=${marray[8]}
 	if [ "$TNAME" == "" ];then return  ;fi
 	if [ "$row" == "insert" ]; then
 		echo "" > "$valuefile" 
 	else
-		sql_rc_read $db $tb eq $PRIMKEY $row > "$valuefile"
+		sql_rc_sql_execute $db $tb eq $PRIMKEY $row > "$valuefile"
 	fi
 
     row_change_xml="$path/tmp/change_row_${tb}.xml"
-    gui_rc_get_dialog $db $tb $row $PRIMKEY $ID $TNAME $TLINE $TNOTN $TSELECT > "$row_change_xml"	
+#    gui_rc_get_dialog $db $tb $row $PRIMKEY $ID $TNAME $TMETA $TNOTN $TSELECT > "$row_change_xml"	
+    gui_rc_get_dialog $db $tb $row  > "$row_change_xml"	
 	gtkdialog -f "$row_change_xml" & # 2> /dev/null  
 }
-function sql_rc_back () { sql_rc_read lt $@; }
-function sql_rc_next () { sql_rc_read gt $@; }
+function sql_rc_back () { sql_rc_sql_execute lt $@; }
+function sql_rc_next () { sql_rc_sql_execute gt $@; }
 function sql_rc_clear () { echo "" > "$valuefile" ; }
 function sql_rc_update_insert () {
 	log $FUNCNAME "$@"
@@ -630,7 +857,7 @@ function sql_rc_update_insert () {
 	if [ "$mode" == "insert" ];then
 		row=$(sql_execute "$db" ".header off\nselect max($PRIMKEY) from $tb;" );
 		if [ "$?" -gt "0" ];then return ;fi
-		sql_rc_read $db $tb eq $PRIMKEY $row
+		sql_rc_sql_execute $db $tb eq $PRIMKEY $row
 	fi
 }
 function sql_rc_delete () {
@@ -643,9 +870,9 @@ function sql_rc_delete () {
 	erg=$(sql_execute $"$db" "select min($PRIMKEY) from $tb;")
 	if [ "$?" -gt "0" ];then return ;fi
 	if [ "$erg" -lt "$ID" ]; then
-	    sql_rc_read "$db" "$tb" "lt" "$PRIMKEY" "$ID"
+	    sql_rc_sql_execute "$db" "$tb" "lt" "$PRIMKEY" "$ID"
 	else
-		sql_rc_read "$db" "$tb" "gt" "$PRIMKEY" "$ID"
+		sql_rc_sql_execute "$db" "$tb" "gt" "$PRIMKEY" "$ID"
 	fi
 }
 function sql_execute () { func_sql_execute $*; }
@@ -684,7 +911,7 @@ function tb_get_meta_val   () {
 	nr=$1  
 	str=$(head -n $(($nr+1)) "$valuefile" | tail -n 1)
 	str="${str#*\= }"
-	IFS="|";arrmeta=($TLINE);IFS=",";meta=(${arrmeta[$nr]});unset IFS
+	IFS="|";arrmeta=($TMETA);IFS=",";meta=(${arrmeta[$nr]});unset IFS
 	if [ "$str" != "" ] && [ "$1" ==  "$ID" ];then  echo "$str" > "$idfile";fi
 	if [ "$str" == "" ] && [ "${meta[3]}" == "1" ]; then  str=$(cat "$idfile");fi 
 	if [ "$str" == "" ];then
