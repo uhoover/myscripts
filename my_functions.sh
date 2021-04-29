@@ -29,7 +29,7 @@ function func_help () {
     echo "         func_test for a short demonstration"
 }
 function func_setmsg () {
-	parm="--notification";text=""
+	local parm="--notification";text=""
 	while [ "$#" -gt "0" ];do
 		case "$1" in
 		"--width"*)				parm="$parm ""$1"		;;
@@ -146,7 +146,7 @@ function func_log_logfile() {
 	echo "$logfile"
 }
 function log() {
-	set +x;oldstate="$(set +o)"
+	oldstate="$(set +o | grep xtrace)"
 	ohnevorschub=0
 	if [ $# -lt 1 ];then func_log " ";return;fi  
 	stopit=0;debug=0
@@ -441,7 +441,7 @@ function func_trim () {
 							"--char"|"-c")        shift;char=$1;;
 							"--text"|"-t")        shift;line="$1";;
 							"--help"|"-h")        func_help $FUNCNAME;return;;
-							[-]*)                 func_help $FUNCNAME "$1";return;;
+							[-]*)                 func_help $FUNCNAME "$1";return 1;;
 							*) line="$line$gap$1"
 									gap=" "
 					esac
