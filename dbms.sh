@@ -43,7 +43,7 @@ function ctrl () {
 	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi 
 	dbparm="$path/parm.sqlite" 
  source $x_configfile
-	if [ "$limit" = "$" ];then limit=150  ;fi
+	if [ "$limit" = "" ];then limit=150  ;fi
 	script=$(readlink -f $0)   
 	tmpf="$path/tmp/dialogtmp.txt"
 	tableinfo="$path/tmp/tableinfo.txt"  
@@ -121,13 +121,13 @@ function ctrl_tb () {
        if [ "${line:0:4}" = "TREE" ];  then   treea+=( $value ) ;fi 
     done < $tmpf
     for ((ia=0;ia<${#cboxtba[@]};ia++)) ;do
-		echo "${labela[$ia]}" "${cboxtba[$ia]}" "${entrya[$ia]}" "${treea[$ia]}" "${cboxwha[$ia]}"
-		label="${labela[$ia]}";tb="${cboxtba[$ia]}";db=$(echo "${entrya[$ia]}" | tr -d '/.');row="${treea[$ia]}";where="${cboxwha[$ia]}"
-		echo $label $tb $db $row $where
-		setconfig_file "${label}_dfltdb"        			"${db}"   		"-" "default-database fuer ${label}"
-		setconfig_file "${label}_dflttable_${db}" 			"${tb}"    		"-" "default-tabelle  fuer ${label}"
-		setconfig_file "${label}_dfltwhere_${db}_${tb}" 	"${where}"  	"-" "default-tabelle  fuer ${label}"
-		setconfig_file "${label}_dflt__row_${db}_${tb}" 	"${row}"  		"-" "default-row 	  fuer ${label}"
+#		echo "${labela[$ia]}" "${cboxtba[$ia]}" "${entrya[$ia]}" "${treea[$ia]}" "${cboxwha[$ia]}"
+#		label="${labela[$ia]}";tb="${cboxtba[$ia]}";db=$(echo "${entrya[$ia]}" | tr -d '/.');row="${treea[$ia]}";where="${cboxwha[$ia]}"
+#		echo $label $tb $db $row $where
+		setconfig_db "parm_id" "defaultdatabase" 	"${labela[$ia]}" "-" 			  "-" 				"${entrya[$ia]}"    
+		setconfig_db "parm_id" "defaulttable"		"${labela[$ia]}" "${entrya[$ia]}" "-" 				"${cboxtba[$ia]}"    
+		setconfig_db "parm_id" "defaultwhere"		"${labela[$ia]}" "${entrya[$ia]}" "${cboxtba[$ia]}" "${cboxwha[$ia]}"   
+		setconfig_db "parm_id" "defaultrow"			"${labela[$ia]}" "${entrya[$ia]}" "${cboxtba[$ia]}" "${treea[$ia]}"   
 	done
 }
 function ctrl_tb_gui () {
@@ -155,11 +155,13 @@ function ctrl_tb_gui () {
 					tb=$(getconfig $label $db)
 		            if [ "$tb" != "" ];then echo $tb; else tb=" ";fi
 		            tb_get_tables "$db" "batch" | grep -v "$tb" ;;
-		"cboxwh") 	where=$(getconfig $label $db $tb)
+		"cboxwh") 	#where=$(getconfig $label $db $tb)
+		        	where=$(getconfig_db parm_value defaultwhere $label $db $tb)
 					if [ "$where" != "" ];then echo $where; else where=" ";fi
 					tb_get_where_list $label $db $tb | grep -v "$where"
-					echo " ";;
-		"tree") 	tb_read_table $label "$db" $tb "$where";;
+					echo " " ;;
+		"tree") 	setmsg -i -d "$FUNCNAME\nlabel $label\ndb    $db\ntb    $tb\nwhere $where"
+					tb_read_table $label "$db" $tb "$where";;
 		"crow_activated")  setmsg -i "label $label\ndb $db\ntb $tb\nrow $row";;
 		*) setmsg -w "$func nicht bekannt"
 	esac	
@@ -200,15 +202,17 @@ function tb_gui_get_xml() {
 	else
 		lb=$(copies 30 '|');sensitiveCBOX="true";ID=0;sensitiveFSELECT="true"
 	fi
+	row=$(getconfig_db parm_value defaultrow "$label" "$db" "$tb") #;row=$(echo $row | tr -d '"')
+	if [ "$row" != "" ];then selected_row="selected-row=\"$row\"" ;else selected_row=""  ;fi
 	terminal="${tpath}/cmd_${label}.txt"
 	terminal_cmd "$terminal" "$label" "$db" 
 	echo '    <vbox>
-		<tree headers_visible="true" hover_selection="false" hover_expand="true" exported_column="'$ID'">
+		<tree headers_visible="true" hover_selection="false" hover_expand="true" exported_column="'$ID'" sort-column="'$ID'" '$selected_row'>
 			<label>"'$lb'"</label>
 			<variable>TREE'$label'</variable>
-			<input>'$script' --func ctrl_tb_gui tree      '$label' '$db' '$tb' $ENTRY'$label' $CBOXTB'$label' $CBOXWHERE'$label'</input>
-			<action>'$script' '$nocSmd' --func ctrl_rc $TREE'$label' $ENTRY'$label' $CBOXTB'$label'</action>	
-			<action signal="row-activated">'$script' --func  ctrl_tb_gui row_activated '$label' '$db' '$tb' $ENTRY'$label' $CBOXTB'$label' $TREE'$label'</action>	
+			<input>'$script' --func ctrl_tb_gui tree      '$label' '$db' '$tb' $ENTRY'$label' $CBOXTB'$label' $CBOXWH'$label'</input>
+			<action>'$script' '$nocmd' --func ctrl_rc $TREE'$label' $ENTRY'$label' $CBOXTB'$label'</action>	
+			<action type="refresh">CBOXWH'$label'</action>		
 		</tree>	
 		<hbox homogenoues="true">
 		  <hbox>
@@ -238,12 +242,12 @@ function tb_gui_get_xml() {
 			</comboboxtext>	
 		</hbox>
 		<hbox>
-			<comboboxtext space-expand="true" space-fill="true" allow-empty="false">
+			<comboboxentry space-expand="true" space-fill="true" allow-empty="true">
 				<variable>CBOXWH'$label'</variable>
 				<input>'$script' --func ctrl_tb_gui cboxwh  '$label' '$db' '$tb' $ENTRY'$label' $CBOXTB'$label' $CBOXWHERE'$label'</input>
-				<action type="clear">TREE'$label'</action>
-				<action type="refresh">TREE'$label'</action>
-			</comboboxtext>	
+				<action signal="activate" type="clear">TREE'$tb'</action>
+				<action signal="activate" type="refresh">TREE'$tb'</action>
+			</comboboxentry>	
 		</hbox>
 		<hbox>
 			<button>
@@ -269,13 +273,18 @@ function tb_gui_get_xml() {
 				<label>insert</label>
 				<variable>BUTTONINSERT'$label'</variable>
 				<sensitive>true</sensitive> 
-				<action>'$script' --func rc_ctrl insert $ENTRY'$label' $CBOXTB'$label'</action>
+				<action>'$script' --func ctrl_rc insert $ENTRY'$label' $CBOXTB'$label'</action>
 			</button>
 			<button visible="true">
 				<label>update</label>
 				<variable>BUTTONAENDERN'$label'</variable>
-				<sensitive>false</sensitive> 
-				<action>'$script' --func rc_ctrl $TREE'$V' $ENTRY'$label' $CBOXTB'$label'</action>
+				<action>'$script' --func ctrl_rc $TREE'$label' $ENTRY'$label' $CBOXTB'$label'</action>
+			</button>
+			<button visible="true">
+				<label>delete</label>
+				<variable>BUTTONDELETE'$label'</variable>
+				<action>'$script' --func ctrl_rc_gui "button_delete  | $ENTRY'$label'| $CBOXTB'$label '| '$PRIMKEY' | $TREE'$label' | "</action>			
+				<action type="refresh">TREE'$label'</action>
 			</button>
 			<button>
 				<label>refresh</label>
@@ -321,13 +330,15 @@ function tb_meta_info () {
 	fi 
 }
 function tb_read_table() {
-	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$(echo $* | tr -d '"')
+	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$* #; where=$(func_trim -c '"' -t $where)
+	setmsg -i  "$FUNCNAME\nlabel $label\ndb    $db\ntb    $tb\nwhere $where"
 	tb_meta_info "$db" $tb
 	if [ "$PRIMKEY" = "rowid" ];then srow="rowid," ;else srow="";fi
 	if [ "$label" = "$tb" ];then off="off" ;else off="on"  ;fi
 	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;"  | tee $epath/export_${tb}_$(date "+%Y%m%d%H%M").txt 
 	if [ "$?" -gt "0" ];then return ;fi 
-	setconfig "$label" "$db" "$tb" "$where" 
+#	setconfig "$label" "$db" "$tb" "$where" 
+	setconfig_db "parm_value" "wherelist" "$label" "$db" "$tb" "$where" 
 }
 function tb_get_where_list () {
 	cmd="grep \"^dummy=\" $x_configfile | grep \"# $1 $2\" | cut -d '\"' -f2"
@@ -351,7 +362,7 @@ function ctrl_rc () {
 function ctrl_rc_gui () {
 	log $FUNCNAME $@
 	pparm=$*;IFS="|";parm=($pparm);unset IFS 
-	func=$(trim_value ${parm[0]});db=$(trim_value ${parm[1]});tb=$(trim_value ${parm[2]});entry=$(trim_value ${parm[3]}) 
+	func=$(trim_value ${parm[0]});db=$(trim_value ${parm[1]});tb=$(trim_value ${parm[2]});entry=$(trim_value ${parm[3]})
 	field=$(trim_value ${parm[3]});key=$(trim_value ${parm[4]});entry=$(trim_value ${parm[4]});values=$(trim_value ${parm[@]:5})
 	case $func in
 		 "entry")   	    str=$(grep "$key" "$valuefile");value="${str#*\= }" 
@@ -375,6 +386,7 @@ function ctrl_rc_gui () {
 							if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
 							rc_sql_execute "$db" "$tb" "delete" "$field" "$key"  
 							if [ $? -gt 0 ];then setmsg "-n" "sql_error";return  ;fi
+							if [ "$values" = "" ];then return;fi
 							nkey=$(rc_sql_execute "$db" "$tb" "gt" "$field" "$key")  
 							if [ "$nkey" = "" ];then nkey=$(rc_sql_execute "$db" "$tb" "lt" "$field" "$key");fi
 							if [ "$nkey" = "" ];then return;fi
@@ -587,6 +599,22 @@ function is_table () {
 	tb=$(sql_execute "$1" ".table $2")
 	if [ "$tb" = "" ];then return 1;else return 0;fi
 }
+function setconfig_db () {
+	set +x
+	getfield="$1";shift;type=$1;field="$2 $3 $4";value=${@:5}  
+#	setmsg -i "$getfield\n$type\n$field\n$value";return
+#	if [ "$type" = "wherelist" ];then getfield="parm_value" ;else getfield="parm_id" ;fi
+ 	id=$(sql_execute $dbparm ".header off\nselect $getfield from parm where parm_field = \"$field\" and parm_type = \"$type\"")
+#	setmsg -i "$getfield\n$type\n$field\n$value\nid $id" ;return
+	if [ "$type" = "wherelist" ] && [ "$id" = "$value" ];then return 0 ;fi
+	if [ "$id" != "" ] && [ "$type" != "wherelist" ]; then
+		 sql_execute "$dbparm" "update parm set parm_value = \"$value\" where parm_id = \"$id\""
+ 	else
+ 		sql_execute $dbparm "insert into parm (parm_field,parm_value,parm_type) values ('$field','$value','$type')"
+	fi
+	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME sql_error";return 1 ;else return 0 ;fi
+	set +x
+}
 function setconfig_file () {
 	field="$1";shift;value="$1";shift;append="$1";shift;comment="$*"
 	line=$(printf "%-80s $s" "$field=\"$value\"" "# $comment")
@@ -603,6 +631,11 @@ function setconfig_file () {
 	cp -f "$x_configfile" "$path/tmp/configrc"  
 	grep -v "# $comment" "$path/tmp/configrc" > "$x_configfile"
 	echo "$line" >> "$x_configfile"
+}
+function getconfig_db () {
+	getfield="$1";type="$2";field="$3"" ""$4"" ""$5";value=${@:5}
+	sql_execute $dbparm ".header off\nselect $getfield from parm where parm_field = \"$field\" and parm_type = \"$type\"" | tr -d '"'
+	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME sql_error";return 1;else return 0 ;fi
 }
 function getconfig () {
 	lb=$1;shift;db=$1;shift;tb=$1;shift
