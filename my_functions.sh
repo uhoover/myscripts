@@ -54,7 +54,7 @@ function func_sql_execute () {
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror" | tr -d '\r'   
 	error=$(<"$sqlerror")
-	if [ "$error" != "" ];then setmsg -e --width=400 "sql_execute $error" $db "\n" $stmt;else rm "$sqlerror";fi
+	if [ "$error" != "" ];then setmsg -e --width=400 "sql_execute\n$error\n$db\n$stmt";else rm "$sqlerror";fi
 	if [ -f "$sqlerror" ];then return 1;else return 0;fi
 }
 function trap_init () {
