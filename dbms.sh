@@ -12,23 +12,7 @@ function axit() {
   	if [ "$cmd" = "" ]; then log stop;fi
 }
 function ftest () {
-	dbmusic="/home/uwe/my_databases/music.sqlite"
-	db="$1";tb="$2";field="$3";declare -a refarr
-	cmdarr+=( "referenz|$dbmusic|track|ref_album_id|$dbmusic|album|select * from album|0|" )
-	cmdarr+=( "referenz|$dbmusic|track|ref_composer_id|$dbmusic|composer|select * from composer|0|" )
-    found=$false
-    set -x
-    IFS='|'
-    for arg in "${refarr[@]}" ;do
-		set $arg
-		func="$1";db1="$2";tb1="$3";field1="$4";db2="$5";tb2="$6";cmd1="$7";cmd2="$8" 
-		if [ "$db"    != "$db1" ];   then continue ;fi
-		if [ "$tb"    != "$tb1" ];   then continue ;fi
-		if [ "$field" != "$field1" ];then continue ;fi
-		SDB=$db2;STB=$tb2;SCMD1=$cmd1;SCMD2=$cmd2;found=$true
-	done
-	if [ "$found" = "$true" ];then echo found $SCMD1; else echo not found  ;fi
-	set +x
+	while read -r line;do echo $line;done
 }
 function ctrl () {
 	log file 
@@ -39,20 +23,17 @@ function ctrl () {
 	[ ! -d "$path/tmp" ] && mkdir "$path/tmp"  
 	[ ! -d "$epath" ]    && mkdir "$epath" && ln -sf "$epath"    "$path"   
 	[   -d "$HOME/log" ]                   && ln -sf "$HOME/log" "$path"   
+	script=$(readlink -f $0)  
 	x_configfile="$path/.configrc" 
-	if [ ! -f "$x_configfile" ];then echo "# defaultwerte etc:" > "$x_configfile" ;fi 
 	dbparm="$path/parm.sqlite" 
- source $x_configfile
-	if [ "$limit" = "" ];then limit=150  ;fi
-	script=$(readlink -f $0)   
-	tmpf="$path/tmp/dialogtmp.txt"
-	tableinfo="$path/tmp/tableinfo.txt"  
-	valuefile="$path/tmp/value.txt"
-	please_choose="---- please choose "$(copies -c "-" 120);
+	parmtb="parm" 
+	limit=150
+	tmpf="$path/tmp/dialogtmp.txt"  
 	notable=$false;visible="true";parm="";nowidgets="false"  
 	pparms=$*
-	ctrl_load_parm
 	notable=$false;visible="true";myparm="";nowidgets="false";wtitle="Uwes sqlite dbms";X=400;Y=600
+	source $x_configfile
+	ctrl_config
 	while [ "$#" -gt 0 ];do
 		case "$1" in
 	        "--tlog"|-t|--show-log-with-tail)  			log tlog ;;
@@ -74,20 +55,32 @@ function ctrl () {
     log start tlog debug $pparms 
 	ctrl_tb $myparm	
 }
-function ctrl_load_parm() {
+function ctrl_config() {
+	if [ ! -f "$x_configfile" ];then 
+		echo "# defaultwerte etc:" 									>> "$x_configfile" 
+		echo "tpath=\"$path/tmp\"						#	target temporary files" 	>> "$x_configfile" 
+		echo "dbparm=\"$path/parm.sqlite\" 				#	parm database" 				>> "$x_configfile" 
+		echo "parmtb=\"parms\" 							#	parm table" 				>> "$x_configfile" 
+		echo "limit=150 								#	 " 							>> "$x_configfile" 
+		echo "tmpf=\"$path/tmp/dialogtmp.txt\" 			#	 " 							>> "$x_configfile" 	  
+	fi 
+	if [ "$parmtb" = "" ]; then parmtb="parms";fi
 	if [ -f $dbparm ];then 
-		table=$(sql_execute $dbparm ".tables parm") ;
-		if [ "$table" = "parm" ];then return  ;fi
+		table=$(sql_execute $dbparm ".tables $parmtb") ;
+		if [ "$table" = "$parmtb" ];then return  ;fi
 	fi
 	sqlite3 $dbparm << EOF
-    create table if not exists parm (
+    create table if not exists $parmtb (
 		parm_id		INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+		parm_status	TEXT,
+		parm_type	TEXT,
 		parm_field	TEXT,
 		parm_value	TEXT,
-		parm_type	TEXT); 
-		insert into parm values (null,0,"0	true","boolean"),(null,1,"1	false","boolean"),
-								(null,0,"0	-","status"),(null,1,"1	in Bearneitung","status"),
-								(null,2,"2	ready","status"),(null,9,"9	update-komplete","status"); 
+		parm_info	TEXT);
+	insert into $parmtb values 	(null,0,"boolean","true","0		true",null),	(null,0,"boolean","false","1	false",null),
+								(null,0,"status","aktiv","0	 	aktiv",null),	(null,0,"status","busy","1	busy",null),
+								(null,0,"status","ready","2	 	ready",null),	(null,0,"status","done","3	done",null),
+								(null,0,"status","inaktiv","9	  inaktiv",null);
 EOF
 }
 function ctrl_tb () {
@@ -152,10 +145,10 @@ function ctrl_tb_gui () {
 		            if [ "$tb" != "" ];then echo $tb; else tb=" ";fi
 		            tb_get_tables "$db" "batch" | grep -v "$tb" ;;
 		"cboxwh") 	#where=$(getconfig $label $db $tb)
-		        	where=$(getconfig_db parm_value defaultwhere $label $db $tb) #| remove_quotes
+		        	where=$(getconfig_db parm_value defaultwhere $label $db $tb) | remove_quotes
 					if [ "$where" != "" ];then echo "$where" ; else where=" ";fi
 					setmsg -i -d "$FUNCNAME\nlabel $label\ndb    $db\ntb    $tb\nwhere $where"
-					sql_execute "$dbparm" "select parm_value from parm where parm_field = \"$label $db $tb\" and parm_type = \"wherelist\"" | remove_quotes
+					sql_execute "$dbparm" "select parm_value from $parmtb where parm_field = \"$label $db $tb\" and parm_type = \"wherelist\"" | remove_quotes
 					;;
 		"tree") 	tb_read_table $label "$db" $tb "$where";;
 		"crow_activated")  setmsg -i "label $label\ndb $db\ntb $tb\nrow $row";;
@@ -307,7 +300,7 @@ function tb_gui_get_xml() {
 function tb_meta_info () {
 	db="$1";tb="$2";local del="";local del2="";local del3="";local line=""
 	TNAME="" ;TTYPE="" ;TNOTN="" ;TDFLT="" ;TPKEY="";TMETA="";TSELECT="";local ip=-1;local pk="-"
-	sql_execute "$db" ".header off\nPRAGMA table_info($tb);"   > $tableinfo
+	sql_execute "$db" ".header off\nPRAGMA table_info($tb);"   > $tmpf
 	if [ "$?" -gt "0" ];then return 1;fi
 	while read -r line;do
 		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
@@ -320,7 +313,7 @@ function tb_meta_info () {
 			TSELECT=$TSELECT$del3$"${arr[1]}";del3=","	
 		fi
 		del=",";del2='|'
-	done < $tableinfo
+	done < $tmpf
 	if [ "$PRIMKEY" = "" ];then 
 		PRIMKEY="rowid";ID=0
 		TNAME="rowid$del$TNAME";TTYPE="Integer$del$TTYPE";TNOTN="1$del$TNOTN";
@@ -335,7 +328,7 @@ function tb_read_table() {
 	if [ "$label" = "$tb" ];then off="off" ;else off="on"  ;fi
 	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;"  | tee $epath/export_${tb}_$(date "+%Y%m%d%H%M").txt 
 	if [ "$?"   -gt "0" ];then return ;fi 
-	setconfig_db "parm_id"    "defaultwhere"  "$label" "$db" "$tb" "$where"
+	setconfig_db "parm_id"    "defaultwhere"  "$label" "$db" "$tb" "$where" 
 	if [ "$where" = "" ]; then return ;fi 
 	setconfig_db "parm_value" "wherelist"     "$label" "$db" "$tb" "$where" 		
 }
@@ -350,7 +343,7 @@ function ctrl_rc () {
 	tb_meta_info "$db" "$tb"
 	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME\nerror Meta-Info\n$db\n$tb";return ;fi
 	if [ "$row" = "insert" ]; then
-		echo "" > "$valuefile" 
+		echo "" > "$path/tmp/value_${tb}.txt" 
 	else
 		rc_sql_execute $db $tb eq $PRIMKEY $row 
 	fi
@@ -364,11 +357,11 @@ function ctrl_rc_gui () {
 	func=$(trim_value ${parm[0]});db=$(trim_value ${parm[1]});tb=$(trim_value ${parm[2]});entry=$(trim_value ${parm[3]})
 	field=$(trim_value ${parm[3]});key=$(trim_value ${parm[4]});entry=$(trim_value ${parm[4]});values=$(trim_value ${parm[@]:5})
 	case $func in
-		 "entry")   	    str=$(grep "$key" "$valuefile");value="${str#*\= }" 
+		 "entry")   	    str=$(grep "$key" "$$path/tmp/value_${tb}.txt");value="${str#*\= }" 
 							if [ "$value" != ""  ];then echo $(trim_value $value | tr -d '"');return;fi
 							IFS=',';meta=$(trim_value ${parm[6]});unset IFS
 							if [ "$field" = "$key" ]; then 
-								value=$(grep "$field" "$valuefile.bak");echo "${value#*\= }";return 
+								value=$(grep "$field" "$path/tmp/value_${tb}.txt.bak");echo "${value#*\= }";return 
 							fi 	 
 							if   [ "${meta[2]}" != "" ]; then  echo "${meta[2]}"  
 							elif [ "${meta[1]}" != "0" ];then  echo "="  
@@ -390,8 +383,8 @@ function ctrl_rc_gui () {
 							if [ "$nkey" = "" ];then nkey=$(rc_sql_execute "$db" "$tb" "lt" "$field" "$key");fi
 							if [ "$nkey" = "" ];then return;fi
 							rc_sql_execute "$db" "$tb" "eq" "$field" "$nkey"  ;;
-		 "button_clear")   	if [ -f "$valuefile" ];then echo "" > "$valuefile";fi ;;
-		 "button_refresh")  cp -f "$valuefile.bak" "$valuefile" ;;
+		 "button_clear")   	if [ -f "$path/tmp/value_${tb}.txt" ];then echo "" > "$path/tmp/value_${tb}.txt";fi ;;
+		 "button_refresh")  cp -f "$$path/tmp/value_${tb}.txt.bak" "$path/tmp/value_${tb}.txt" ;;
 		 "cbox_i")          rc_gui_get_cmd "$db" "$tb" "$key";									# regel ermitteln
 							entry=$($FUNCNAME "entry | $db | $tb | $field | $key" )				# entry ermitteln recursiv funktioniert!
 							if [ "$FUNC" = "reference" ]; then
@@ -544,7 +537,7 @@ function rc_sql_execute () {
 			iline="$iline$del$field"
 			vline="$vline$del"'"'"${values[$ia]}"'"'
 			del=","
-	     done < "$valuefile"
+	     done < "$path/tmp/value_${tb}.txt"
 	fi
 	if [ "$mode" = "eq" ];		then where="where $PRIMKEY = $row ;";fi
 	if [ "$mode" = "delete" ];	then where="where $PRIMKEY = $row ;";fi
@@ -563,15 +556,15 @@ function rc_sql_execute () {
 	if [ "$mode" = "insert" ];	then setmsg -n "success insert";return  ;fi
 	if [ "$mode" = "update" ];	then setmsg -n "success update";return  ;fi
 	if [ "$erg"  = ""  ];then setmsg -i "keine id $mode $row gefunden"  ;return 1;fi
-    echo -e "$erg" > "$valuefile"
-    cp -f "$valuefile" "$valuefile.bak"
+    echo -e "$erg" > "$path/tmp/value_${tb}.txt"
+    cp -f "$path/tmp/value_${tb}.txt" "$path/tmp/value_${tb}.txt.bak"
 }
 function rc_get_parm () {
 	field="$1";shift;nr="$1";shift;type="$1" 
 	val=$(tb_get_meta_val $nr)
-	stmt=".mode csv\nselect parm_value from parm where parm_field   = \"$val\" and parm_type = \"$type\""
+	stmt=".mode csv\nselect parm_value from $parmtbwhere parm_field   = \"$val\" and parm_type = \"$type\""
 	sql_execute $dbparm $stmt | tr -d '"'
-	stmt=".mode csv\nselect parm_value from parm where parm_field  != \"$val\" and parm_type = \"$type\""
+	stmt=".mode csv\nselect parm_value from $parmtbwhere parm_field  != \"$val\" and parm_type = \"$type\""
 	sql_execute $dbparm $stmt | tr -d '"'
 	echo "$please_choose"
 }
@@ -602,9 +595,9 @@ function setconfig_db () {
 	getfield="$1";shift;type=$1;field="$2 $3 $4";value=${@:5}
 	log -d "$FUNCNAME getfield $getfield type #$type# field  $field  value $value id   $id" 
 	if [ "$type" = "wherelist" ]; then
-		id=$(sql_execute $dbparm ".header off\nselect $getfield from parm where parm_field = '$field' and parm_value = '$value' and parm_type = '$type'")
+		id=$(sql_execute $dbparm ".header off\nselect $getfield from $parmtb where parm_field = '$field' and parm_value = '$value' and parm_type = '$type' limit 1")
 	else
-		id=$(sql_execute $dbparm ".header off\nselect $getfield from parm where parm_field = \"$field\" and parm_type = \"$type\"")
+		id=$(sql_execute $dbparm ".header off\nselect $getfield from $parmtb where parm_field = \"$field\" and parm_type = \"$type\" limit 1")
 	fi
 	if [ "$type" = "wherelist" ] ;then
 	    str1=$(echo $id    | tr -d '"')
@@ -613,9 +606,9 @@ function setconfig_db () {
 	    setmsg -i -d "str1 $str1\nstr2 $str2"
 	fi
 	if [ "$id" != "" ] && [ "$type" != "wherelist" ]; then
-		sql_execute "$dbparm" "update parm set parm_value = '$value' where parm_id = \"$id\""
+		sql_execute "$dbparm" "update $parmtb set parm_value = '$value' where parm_id = \"$id\""
  	else
- 		sql_execute $dbparm "insert into parm (parm_field,parm_value,parm_type) values ('$field','$value','$type')"
+ 		sql_execute $dbparm "insert into $parmtb (parm_field,parm_value,parm_type) values ('$field','$value','$type')"
 	fi
 	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME sql_error";return 1 ;else return 0 ;fi
 }
@@ -638,10 +631,12 @@ function setconfig_file () {
 }
 function getconfig_db () {
 	set +x
-	getfield="$1";type="$2";field="$3"" ""$4"" ""$5";value=${@:5}
-	sql_execute $dbparm ".header off\nselect $getfield from parm where parm_field = \"$field\" and parm_type = \"$type\"" 
+	getfield="$1";type="$2";field="$3"" ""$4"" ""$5";value=${@:6}
+	log "$FUNCNAME parmtb $parmtb\ngetfield $getfield\ntype $type\nfield $field\nvalue $value"
+	sql_execute $dbparm ".header off\nselect $getfield from $parmtb where parm_field = \"$field\" and parm_type = \"$type\" limit 1" #>> $logfile
+	log "$FUNCNAME getfield $getfield\ntype $type\nfield $field\nvalue $value"
+	setmsg -i -d --width=400 "$FUNCNAME getfield $getfield\ntype $type\nfield $field\nvalue $value"
 	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME sql_error";return 1;else return 0 ;fi
-	setmsg -i "$FUNCNAME getfield $getfield\ntype $type\nfield $field\nvalue $value"
 }
 function getconfig () {
 	lb=$1;shift;db=$1;shift;tb=$1;shift
@@ -677,12 +672,12 @@ function set_rc_value_extra   () {
 function trim_value   () { echo $* ; }
 function set_rc_value   () {
 	field=$1;shift;value="$*"
-	cp -f "$valuefile" "$valuefile"".bak2"
+	cp -f "$path/tmp/value_${tb}.txt" "$path/tmp/value_${tb}.txt.bak2"
 	while read line;do
 		name=$(trim_value "${line%%=*}") 
 		if [ "$field" != "$name" ];then echo $line;continue;fi  
 		echo "$name = ${value}"
-	done  < "$valuefile"".bak2" > "$valuefile"
+	done  < "$path/tmp/value_${tb}.txt.bak2" > "$path/tmp/value_${tb}.txt"
 	setmsg -i -d "$FUNCNAME break\n$parm"
 }
 function tb_get_tables () {
@@ -695,7 +690,7 @@ function tb_get_tables () {
 function sql_execute () { func_sql_execute $*; }
 function tb_get_meta_val   () {
 	nr=$1  
-	str=$(head -n $(($nr+1)) "$valuefile" | tail -n 1)
+	str=$(head -n $(($nr+1)) "$path/tmp/value_${tb}.txt" | tail -n 1)
 	str="${str#*\= }"
 	IFS="|";arrmeta=($TMETA);IFS=",";meta=(${arrmeta[$nr]});unset IFS
 	if [ "$str" != "" ] && [ "$1" ==  "$ID" ];then  echo "$str" > "$idfile";fi

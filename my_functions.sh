@@ -29,7 +29,8 @@ function func_help () {
     echo "         func_test for a short demonstration"
 }
 function func_setmsg () {
-	local parm="--notification";text=""
+	local parm="--notification";local text=""
+	log $*
 	while [ "$#" -gt "0" ];do
 		case "$1" in
 		"--width"*)				parm="$parm ""$1"		;;
@@ -44,6 +45,7 @@ function func_setmsg () {
 		esac
 		shift
 	done
+#	text=$(echo $text | tr '"<>' '___')
 	if [ "$text" != "" ];then text="--text='$text'" ;fi
 	eval 'zenity' $parm $text 
 	return $?
