@@ -30,7 +30,7 @@ function func_help () {
 }
 function func_setmsg () {
 	local parm="--notification";local text=""
-	log $*
+	log debug $*
 	while [ "$#" -gt "0" ];do
 		case "$1" in
 		"--width"*)				parm="$parm ""$1"		;;
@@ -148,7 +148,7 @@ function func_log_logfile() {
 	echo "$logfile"
 }
 function log() {
-	oldstate="$(set +o | grep xtrace)"
+	oldstate="$(set +o | grep xtrace)";set +x
 	ohnevorschub=0
 	if [ $# -lt 1 ];then func_log " ";return;fi  
 	stopit=0;debug=0
