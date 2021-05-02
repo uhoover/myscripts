@@ -136,7 +136,7 @@ function ctrl_tb_gui () {
 	is_database $db
 	if [ "$?" -gt "0" ];			then setmsg -w "keine Datenbnk ausgewaehlt";return;fi
 	if [ "$tb_gui" != "" ];			then tb=$tb_gui ;fi
-	if [ "$tb" 		= "dflttb" ];	then tb=$(getconfig $label $db);fi
+	if [ "$tb" 		= "dflttb" ];	then tb=$(getconfig_db parm_value defaulttable $label $db "-");fi
 	if [ "$tb" 		= "" ];			then tb=$(getconfig $label $db);fi
 	if [ "$tb" 		= "" ];			then tb=$(tb_get_tables "$db" "batch"| head -n1);fi
 	if [ "$tb"      = "" ];			then setmsg -w "keine Tabelle gefunden";return;fi
@@ -144,9 +144,9 @@ function ctrl_tb_gui () {
 	if [ "$where"   = "" ]; 		then where=$(getconfig_db parm_value defaultwhere $label $db $tb | remove_quotes);fi 
 	case "$func" in
 		"entry")   	echo $(getconfig $label);return;;
-		"fselect") 	db=$(get_fileselect);is_database $db;if [ "$?" = "0" ];then setconfig $label $db;fi;return;;
+		"fselect") 	db=$(get_fileselect);is_database $db;if [ "$?" = "0" ];then setconfig_db parm_value defaultdatabase $label "-" "-";fi;return;;
 		"cboxtb") 	if [ "$label" = "$tb" ];then echo $tb;return;fi
-		            db=$(getconfig $label)
+		            db=$(getconfig_db parm_value defaultdatabas $label "-" "-")
 					if [ "$db" = "" ];	then setmsg -e "keine Datenbank gefunden";return;fi
 					tb=$(getconfig $label $db)
 		            if [ "$tb" != "" ];then echo $tb; else tb=" ";fi
@@ -155,7 +155,7 @@ function ctrl_tb_gui () {
 		        	where=$(getconfig_db parm_value defaultwhere $label $db $tb) #| remove_quotes
 					if [ "$where" != "" ];then echo "$where" ; else where=" ";fi
 					setmsg -i -d "$FUNCNAME\nlabel $label\ndb    $db\ntb    $tb\nwhere $where"
-					sql_execute "$db" "select parm_value from parm where parm_field = \"$label $db $tb\" and parm_type = \"wherelist\"" | remove_quotes
+					sql_execute "$dbparm" "select parm_value from parm where parm_field = \"$label $db $tb\" and parm_type = \"wherelist\"" | remove_quotes
 					;;
 		"tree") 	tb_read_table $label "$db" $tb "$where";;
 		"crow_activated")  setmsg -i "label $label\ndb $db\ntb $tb\nrow $row";;
@@ -716,8 +716,9 @@ function terminal_cmd () {
 }
 function remove_quotes () {
 	while read -r line;do
-        if [ "${line:0:2}" = '""' ]; then lng=${#line};line="${line:2:$lng-3}";fi	
-        if [ "${line:0:1}" = '"' ]; then lng=${#line};line="${line:1:$lng-2}";fi	
+		lng=${#line}
+        if [ "$lng" -gt "3" ] && [ "${line:0:2}" = '""' ]; then lng=${#line};line="${line:2:$lng-3}";fi	
+        if [ "$lng" -gt "2" ] && [ "${line:0:1}" = '"' ];  then lng=${#line};line="${line:1:$lng-2}";fi	
         echo $line | tr -s '"'
     done
 }
