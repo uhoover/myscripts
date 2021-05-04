@@ -52,7 +52,7 @@ function func_setmsg () {
 }
 function func_sql_execute () {
 	set -o noglob
-	if [ "$sqlerror" == "" ];then sqlerror="/tmp/sqlerror.txt";fi
+	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror" | tr -d '\r'   
 	error=$(<"$sqlerror")
@@ -92,7 +92,7 @@ function trap_while() {
 	LASTLINE=($1-1) 
 	CMD="";            # argument 1: last line of error occurence
 	if [ ${FIRST} -lt 1 ]; then  FIRST=1; trap_start; fi  
-	AKTLINE=${SOURCELINE[$LASTLINE]}
+	AKTLINE=${SOURCELINE[$LASTLINE]}    # $BASH_COMMAND moeglich?
 	msg="$msg:${AKTLINE%\^*}" 
 	CMD=""
 	while [[ $CMD != "ende" ]]; do
