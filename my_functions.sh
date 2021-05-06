@@ -29,6 +29,7 @@ function func_help () {
     echo "         func_test for a short demonstration"
 }
 function func_setmsg () {
+	oldstate="$(set +o | grep xtrace)";set +x
 	local parm="--notification";local text=""
 	log debug $*
 	while [ "$#" -gt "0" ];do
@@ -47,6 +48,7 @@ function func_setmsg () {
 	done
 #	text=$(echo $text | tr '"<>' '___')
 	if [ "$text" != "" ];then text="--text='$text'" ;fi
+	eval "$oldstate"
 	eval 'zenity' $parm $text 
 	return $?
 }
@@ -56,8 +58,9 @@ function func_sql_execute () {
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror" | tr -d '\r'   
 	error=$(<"$sqlerror")
-	if [ "$error" != "" ];then setmsg -e --width=400 "sql_execute\n$error\n$db\n$stmt";else rm "$sqlerror";fi
-	if [ -f "$sqlerror" ];then return 1;else return 0;fi
+	if [ "$error"  = "" ];then return 0;fi
+	setmsg -e --width=400 "sql_execute\n$error\n$db\n$stmt" 
+	return 1
 }
 function trap_init () {
     script="$0";script=${script##*\\};
@@ -75,7 +78,7 @@ function trap_help () {
 }
 function trap_stop() { STOP=0; }
 function trap_off() { TRAPOFF=1; }
-function trap_at() { trap_while "1" "stop at ${FIELD}:$1" "$1" "$1" "$2"; }
+function trap_at() { trap_while "1" "stop at :$1" "$1" "$1" "$2"; }
 function trap_when() { trap_while "1" "stop when $2 = $3:$1" "$1" "$2" "$3"; } 
 function trap_change() { trap_while "0" "change $2 $OLD_VALUE $1" $1 $2 $2; } 
 function trap_debug() { trap_while "1" "debug $1 " $1 $1 $1; } 
@@ -93,7 +96,8 @@ function trap_while() {
 	CMD="";            # argument 1: last line of error occurence
 	if [ ${FIRST} -lt 1 ]; then  FIRST=1; trap_start; fi  
 	AKTLINE=${SOURCELINE[$LASTLINE]}    # $BASH_COMMAND moeglich?
-	msg="$msg:${AKTLINE%\^*}" 
+#	msg="$msg:${AKTLINE%\^*}" 
+	msg="$msg:${BASH_COMMAND}" 
 	CMD=""
 	while [[ $CMD != "ende" ]]; do
 		read -u 4 -p "$msg " CMD
@@ -642,7 +646,7 @@ function func_while_file () {
 }
 function dofile () { func_while_file "$@"; }
 function func_quote (){
-    line="";ql='"';qr='"';i=0;gap="";file="";x=0
+    line="";ql='"';qr='"';i=0;gap="";file="";x=0;delimiter=","
     while [ $# -gt 0 ] ;do
 		if [ "$(echo $1 | grep -e '^-[a-z].')" ]; then # zB -avcb
 			nparm=$(func_mygetopt $1)
@@ -652,27 +656,37 @@ function func_quote (){
 				"--quote-left"|"--ql"|"-l")    shift;ql="$1";;
 				"--quote-right"|"--qr"|"-r")   shift;qr="$1";;
 				"--quote-char"|"--qc"|"-c")    shift;ql="$1";qr="$1";;
+				"--delimiter"|"--dl"|"-d")     shift;delimiter="$1";;
 				"--text"|"-t")                 shift;line="$line$ql$1$qr";;
 				"--help"|"-h")                 func_help $FUNCNAME;return;;
 				"--debug"|"-x")                set -x;x=1;;
 			#	[-]*)                          func_help $FUNCNAME "$1";return;;
 				*)  if [ "$file" == "" ]; then file=$1; fi
-						line="$line$gap$ql$1$qr"
-						gap=" "
+					line="$line$gap$1"
+					gap=" "
 			esac
 			shift
 		fi
     done
-    if [ "$line" != "" ] && [ ! -f "$file" ] ; then echo "$line";return;fi
-    if [ -f "$file" ] ;then
+    if [ "$line" != "" ]  ; then 
+		echo "$line" 
+    elif [ -f "$file" ] ;then
         cat "$file"
     else
         cat < /dev/stdin
     fi |
-    while IFS=: read -r line;do
-        echo $ql$line$qr
-    done
-    if [ "$x" -gt 0 ]; then set +x;fi        
+    while read -r line;do
+		IFS="$delimiter";arr=($line);unset IFS;del="";erg="" 
+		for arg in "${arr[@]}"; do
+			if [ "${arg:0:$lng}" = "$ql" ];then 
+				erg=$erg$del$arg 
+			else
+				erg=$erg$del$ql$arg$qr
+			fi
+			del=$delimiter
+		done
+        echo $erg
+    done      
 }
 function quote () { func_quote "$@"; }
 function func_paste () {
@@ -1062,30 +1076,10 @@ save_geometry (){
 	echo "HEIGHT=$HEIGHT"  >  "$gfile"
 	echo "WIDTH=$WIDTH"    >> "$gfile"
 	echo "X=$X"            >> "$gfile"
-	echo "SY=$Y"           >> "$gfile"
+	echo "Y=$Y"            >> "$gfile"
 	chmod 700 "$gfile"
 }
 trap_init
-#func_init
-#export -f log
-#export -f trap_long
-#export -f trap_at
-#export -f trap_change
-#export -f trap_when
-#log_on=1
-#echo_on=0
-#debug_on=0
-#verbose_on=0
-
-#export logfile="/root/uwelog.txt"
-
-#export PATHGIT="/mnt/fritzbox/USBDISK2-0-01/gitrepros"
-
-#alias pfritz='cd "/mnt/fritzbox/USBDISK2-0-01"'
-#alias pscript='cd "/root/my-applications/my_scripts"'
-#export pdb='/root/my_databases/parmtb.sqlite'
-#export ptb='parm'
-
 	if [ -d "$MYPATH" ]; then
 		log debug "oldpath $PATH" 
 		export PATH="$PATH:$MYPATH"
