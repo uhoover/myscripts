@@ -9,7 +9,7 @@
         declare -i STOP=99999;STOP=0
         declare -i FIRST=0;FIRST=0
         declare -i TRAPOFF=0
-        declare -a SOURCELINE
+ #       declare -a SOURCELINE
         declare -t true=0
         declare -t false=1
         declare -t TMPF="/tmp/tmpfile.txt"
@@ -68,7 +68,7 @@ function trap_init () {
     export PS4='${script}+(${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 }
 function trap_start() { 
-    IFS=$'\n' SOURCELINE=( $( cat -A "$0" ) )
+#    IFS=$'\n' SOURCELINE=( $( cat -A "$0" ) )
     FIRST=1
 }
 function trap_help () {
@@ -89,13 +89,13 @@ function trap_while() {
 	if [ "$OLD_VALUE"   == "$2" ] && [ $eq -eq 1 ]; then  STOP=1; fi    
 	if [ "$OLD_VALUE"   == "$2" ] && [ $eq -eq 0 ]; then  STOP=0; fi    
 	if [ "$OLD_VALUE"   != "$2" ] && [ $eq -eq 0 ]; then  STOP=1; fi    
-	if [ $STOP    -lt 1 ]; then  return; fi 
-	if [ $TRAPOFF -gt 0 ]; then  return; fi  
+	if [ "$STOP"   	   -lt 1 ]; then  return; fi 
+	if [ "$TRAPOFF"    -gt 0 ]; then  return; fi  
 	OLD_VALUE="$3";
 	LASTLINE=($1-1) 
 	CMD="";            # argument 1: last line of error occurence
 	if [ ${FIRST} -lt 1 ]; then  FIRST=1; trap_start; fi  
-	AKTLINE=${SOURCELINE[$LASTLINE]}    # $BASH_COMMAND moeglich?
+#	AKTLINE=${SOURCELINE[$LASTLINE]}    # $BASH_COMMAND moeglich?
 #	msg="$msg:${AKTLINE%\^*}" 
 	msg="$msg:${BASH_COMMAND}" 
 	CMD=""
@@ -646,7 +646,7 @@ function func_while_file () {
 }
 function dofile () { func_while_file "$@"; }
 function func_quote (){
-    line="";ql='"';qr='"';i=0;gap="";file="";x=0;delimiter=","
+    line="";ql='"';qr='"';i=0;gap="";file="";x=0;delimiter=",";remove=$false
     while [ $# -gt 0 ] ;do
 		if [ "$(echo $1 | grep -e '^-[a-z].')" ]; then # zB -avcb
 			nparm=$(func_mygetopt $1)
@@ -657,6 +657,7 @@ function func_quote (){
 				"--quote-right"|"--qr"|"-r")   shift;qr="$1";;
 				"--quote-char"|"--qc"|"-c")    shift;ql="$1";qr="$1";;
 				"--delimiter"|"--dl"|"-d")     shift;delimiter="$1";;
+				"--remove"|"-r")    		   remove="$true";;
 				"--text"|"-t")                 shift;line="$line$ql$1$qr";;
 				"--help"|"-h")                 func_help $FUNCNAME;return;;
 				"--debug"|"-x")                set -x;x=1;;
@@ -668,6 +669,7 @@ function func_quote (){
 			shift
 		fi
     done
+    lql=${#ql};lqr=${#qr}
     if [ "$line" != "" ]  ; then 
 		echo "$line" 
     elif [ -f "$file" ] ;then
@@ -678,7 +680,17 @@ function func_quote (){
     while read -r line;do
 		IFS="$delimiter";arr=($line);unset IFS;del="";erg="" 
 		for arg in "${arr[@]}"; do
-			if [ "${arg:0:$lng}" = "$ql" ];then 
+			while true;do		#	remove quotes
+				lng=${#arg}
+				if [ "$lng" -gt "$lql" ] && [ "${arg:0:$lql}" = "$ql" ]; then 
+					arg="${arg:$lql}" 
+					lng="${#arg}"
+	                if [ "${arg:$lng-$lqr:$lqr}" = "$qr" ];  then arg="${arg:0:$lng-$lqr}";fi
+	            else    	
+					break;
+			    fi
+			done	  
+			if [ "$remove" = "$true" ];then 
 				erg=$erg$del$arg 
 			else
 				erg=$erg$del$ql$arg$qr
