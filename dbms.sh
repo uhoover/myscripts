@@ -12,22 +12,7 @@ function axit() {
   	if [ "$cmd" = "" ]; then log stop;fi
 }
 function ftest () {
-#	IFS='';getfield="$1";shift;type="$1";shift;field="$1";shift;default="$1";shift;where=$*;unset IFS
-    for arg in "$@";do echo "$arg";done
-	getfield="$1";type="$2";field="$3";default="$4";where=${@:5} 
-	echo $getfield
-	echo $type
-	echo $field
-	echo $default
-	echo $where
-	return
-	getfield="$1";shift;type="$1";shift;field="$1";field=$(echo "$field" | tr ' ' '_');shift;default="$1";shift;where=$*
-	ix=$(pos '%' $field);if [ "$ix" -gt "-1" ];then eq1="like"  ;else eq1="=" ;fi
-	ix=$(pos '%' $type); if [ "$ix" -gt "-1" ];then eq2="like"  ;else eq2="=" ;fi
-	value=$(sql_execute $dbparm ".header off\nselect $getfield from $parmtb where parm_field $eq1 \"$field\" and parm_type $eq2 \"$type\" $where") 
-	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME sql_error";return 1 ;fi
-	if [ "$value" = "" ] &&  [ "$default" != "" ];then value="$default";setconfig_db "$type" "$field" "$value" ;fi
-	echo $value;return 0
+    log debug $FUNCNAME
 }
 function ctrl () {
 	log file 
@@ -48,7 +33,6 @@ function ctrl () {
 	term_heigth=$(getconfig_db "parm_value" "config" "term_heigth" 8)
 	wtitle=$(getconfig_db "parm_value" "config" "wtitle" "dbms")
 	export=$(getconfig_db "parm_value" "config" "export" "$false")
-	geometry='800x800+100+100'
 	tmpf="$path/tmp/dialogtmp.txt"   
 	pparms=$*
 	notable=$false;visible="true";myparm="";nowidgets="false";X=400;Y=600
@@ -65,7 +49,8 @@ function ctrl () {
 	        "--nolabel"|--no-notebook-label)			nolabel=$true ;;
 	        "--nowidgets"|--no-extra-widgets)			nowidgets="true" ;;
 	        "--window"|-w|--window-title)			    shift;wtitle="$1" ;;
-	        "--geometry"|-g|--HEIGHTxWIDTH+X+Y)			shift;geometry="$1" ;;
+	        "--geometry_tb"|--gtb|--HEIGHTxWIDTH+X+Y)	shift;geometry_tb="$1" ;;
+	        "--geometry_rc"|--grc|--HEIGHTxWIDTH+X+Y)	shift;geometry_rc="$1" ;;
 	        "--help"|-h)								func_help $FUNCNAME;echo -e "\n     usage [ dbname [table ] --all  ]" ;return;;
 	        "--all"|--tab-each-table)					myparm="$myparm $1";;
 	        "--trap_at"|--trap_at_line)					shift;trap 'set +x;trap_at $LINENO $1;set -x' DEBUG;shift;;
@@ -86,7 +71,8 @@ function ctrl_config() {
 		echo "# limit=150 									#	 " 							>> "$x_configfile" 
 		echo "# tmpf=\"$path/tmp/dialogtmp.txt\" 			#	 " 							>> "$x_configfile" 	  
 		echo "# export=\"$false\" 							#	always read to file " 		>> "$x_configfile" 	  
-		echo "# geometry=\"800x600+100+100\" 				#	set height,width,x,y " 		>> "$x_configfile" 	  
+		echo "# geometry_tb=\"800x600+100+100\" 			#	set tb height,width,x,y " 	>> "$x_configfile" 	  
+		echo "# geometry_rc=\"400x400+100+150\" 			#	set rc height,width,x,y " 	>> "$x_configfile" 	  
 	fi 
 	if [ "$parmtb" = "" ]; then parmtb="parms";fi
 	if [ -f $dbparm ];then 
@@ -121,7 +107,7 @@ function ctrl_tb () {
 	else
 	    xmlfile="${tpath}/${xfile}"
 	    wtitle=$(echo $wtitle $notebook | tr ' ' '-')
-		echo "<window title=\"$wtitle\">" > $xmlfile
+		echo "<window title=\"$wtitle\" allow-shrink=\"true\">" > $xmlfile
 		echo "<notebook show-tabs=\"$visible\"  tab-labels=\""$(echo $notebook | tr '_ ' "-|")"\">" >> $xmlfile
 		for arg in "${arr[@]}" ;do
 			IFS='#';set -- $arg;unset IFS 
@@ -130,13 +116,10 @@ function ctrl_tb () {
 		done
 		echo "</notebook></window>" >> $xmlfile
 	fi
-##	X=10;Y=10;HEIGHT=800;WIDTH=900
-##  [ -f "$geometryfile" ] && source "$geometryfile" 						# falls xwin informationen gespeichert sind
-##  geometry="${WIDTH}x${HEIGHT}+${X}+${Y}"
-    mygeometry=$(getconfig_db "parm_value" "config" "$geometrylabel" "$geometry")
-##  log $FUNCNAEME geometry_file $geometry geometry_config $mygeometry
+    if [ "$geometry_tb" = "" ];then geometry_tb=$(getconfig_db "parm_value" "config" "$geometrylabel" '800x800+100+100');fi
 ##
-    gtkdialog -f "$xmlfile" --geometry="$mygeometry" > $tmpf					# start dialog
+	echo '' > $tmpf
+    gtkdialog -f "$xmlfile" --geometry="$geometry_tb" > $tmpf					# start dialog
 ##    
     while read -r line;do
 		echo $line															# defaultwerte speichern
@@ -157,6 +140,7 @@ function ctrl_tb () {
 			setconfig_db "defaultrow" 	"${labela[$ia]} ${entrya[$ia]} ${cboxtba[$ia]}" "${treea[$ia]}" 
 		fi   
 	done
+
 }
 function ctrl_tb_gui () {
 	pparm=$*;IFS="|";parm=($pparm);unset IFS 
@@ -461,15 +445,12 @@ function ctrl_rc () {
     if [ -f "${xpath}/change_row_${tb}.xml" ]; then
 		row_change_xml="${xpath}/change_row_${tb}.xml"
 	else	
-		echo "<window title=\"$wtitle\">" > "$row_change_xml"
+		echo "<window title=\"$wtitle\" allow-shrink=\"true\">" > "$row_change_xml"
 		rc_gui_get_xml $db $tb $row  >> "$row_change_xml"
 		echo "</window>" >> "$row_change_xml"
 	fi	
-	X=100;Y=100;HEIGHT=400;WIDTH=400
-#    [ -f "$geometryfile" ] && source "$geometryfile" 						# falls xwin informationen gespeichert sind
-    geometry="${WIDTH}x${HEIGHT}+${X}+${Y}"
-    mygeometry=$(getconfig_db "parm_value" "config" "$geometrylabel" "$geometry")
- 	gtkdialog -f "$row_change_xml" --geometry=$mygeometry & # 2> /dev/null  
+    if [ "$geometry_rc" = "" ];then geometry_rc=$(getconfig_db "parm_value" "config" "$geometrylabel" '100x100+100+150');fi
+ 	gtkdialog -f "$row_change_xml" --geometry=$geometry_rc & # 2> /dev/null  
 }
 function ctrl_rc_gui () {
 	log debug $FUNCNAME $@
@@ -547,22 +528,22 @@ function ctrl_rc_gui () {
 function rc_gui_get_xml () {
 	log debug "$FUNCNAME ID $ID $@"
 	db="$1";shift;tb="$1";shift;key="$1"
-	sizetlabel=20;sizemeta=36;ref_entry=""
+	sizetlabel=20;sizeentry=36;sizetext=46;ref_entry=""
 	eval 'cmd_ref=$'$(get_field_name $db$tb"_ref")
     eval 'cmd_fsl=$'$(get_field_name $db$tb"_fsl")
     eval 'cmd_bln=$'$(get_field_name $db$tb"_bln")
     IFS=",";name=($TNAME);unset IFS;IFS="|";meta=($TMETA);unset IFS
-	echo '<vbox>'
-	echo '	<vbox>'
+	echo '<vbox hscrollbar-policy="0" vscrollbar-policy="0" space-expand="true" scrollable="true">'
+	echo '	<vbox space-expand="false">'
 	echo '		<hbox>'
-	echo '			<entry width_chars="'$sizemeta'" space-expand="false">'
+	echo '			<entry width_chars="'$sizeentry'" space-fill="true">'
 	echo '				<variable>entryp</variable>'
 	echo '				<input>'$script' --func ctrl_rc_gui "entry | '$db '|' $tb '|' ${PRIMKEY} '|' ${name[$ia]} '|' ${meta[$ID]}'"</input>'
 	echo '			</entry>'
 	echo '			<text width-chars="46" justify="3"><label>'$PRIMKEY' (PK) (type,null,default,primkey)</label></text>'
 	echo '		</hbox>'
 	echo '	</vbox>'
-	echo '  <vbox hscrollbar-policy="0">'
+	echo '  <vbox>'
     entrys="";del=""
    	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
@@ -572,7 +553,7 @@ function rc_gui_get_xml () {
 		echo    '	<hbox>' 
 		IFS='#';set -- $cmd;unset IFS
 		if  [ "$func" = "" ] || [ "$func" = "fileselect" ] ; then 
-			echo    ' 			<entry width_chars="'$sizemeta'"  space-fill="true">'  
+			echo    ' 			<entry width_chars="'$sizeentry'"  space-fill="true">'  
 			echo    ' 				<variable>entry'$ia'</variable>' 
 			echo    ' 				<sensitive>true</sensitive>' 
 			echo    ' 				<input>'$script' --func ctrl_rc_gui "entry  | '$db '|' $tb '|' ${PRIMKEY} '|' ${name[$ia]} '|' ${meta[$ia]}'"</input>' 
@@ -621,7 +602,7 @@ function rc_gui_get_xml () {
 		  fi
 		fi
 		if 	[ "$func" = "cmd" ] ;then echo ${@:2};fi 
-		echo  	' 			<text width-chars="'$sizemeta'" justify="2"><label>'${name[$ia]}' ('${meta[$ia]}')</label></text>'   
+		echo  	' 			<text width-chars="'$sizetext'" justify="3"><label>'${name[$ia]}' ('${meta[$ia]}')</label></text>'   
 		echo    '	</hbox>' 
 	done
 	echo '	</vbox>'
@@ -768,7 +749,6 @@ function sql_execute () { func_sql_execute $*; }
 function terminal_cmd () {
 	termfile="$1" ;local db="$(getconfig_db parm_value defaultdatabase $2)" 
 	echo ".exit 2> /dev/null" 	>  "$termfile" 
-#	echo "clear" 				>  "$termfile" 
 	echo "sqlite3 $db" 			>> "$termfile"  
 }
 function remove_quotes () { quote --remove $* | tr -s '"' ; }
