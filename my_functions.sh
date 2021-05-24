@@ -52,6 +52,7 @@ function func_setmsg () {
 	eval 'zenity' $parm $text 
 	return $?
 }
+function setmsg () { func_setmsg $* ; }
 function func_sql_execute () {
 	set -o noglob 
 	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
@@ -62,6 +63,7 @@ function func_sql_execute () {
 	setmsg -e --width=400 "sql_execute\n$error\n$db\n$stmt" 
 	return 1
 }
+function sql_execute () { func_sql_execute $* ; }
 function trap_init () {
     script="$0";script=${script##*\\};
     exec 4< /dev/stdin

@@ -15,7 +15,7 @@ function ftest () {
     log debug $FUNCNAME
 }
 function ctrl () {
-	log file 
+	log file  
 	rxvt="urxvt -depth 32 -bg [65]#000000 -geometry 40x20"
 	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
 	tpath="$path/tmp";xpath="$path/xml" 
@@ -149,8 +149,8 @@ function ctrl_tb_gui () {
 	where_gui_scroll=$(trim_value ${parm[7]})
  	setmsg -i -d --width=600 "func $func\nlabel $label\ndb $db\ntb $tb\ndb_gui $db_gui\ntb_gui $tb_gui\nwhere_gui $where_gui\nrow $row"
 	found=$true 
-	mode=$(getconfig_db "parm_value" "selection_mode" "CBOXWH")
-	if [ "$mode" = "scroll" ];		then where_gui=$where_gui_scroll  ;fi
+#	mode=$(getconfig_db "parm_value" "selection_mode" "CBOXWH")
+#	if [ "$mode"    = "scroll" ];		then where_gui=$where_gui_scroll  ;fi
 	if [ "$func"    = "entry" ];	then db_gui="" ;fi
 	if [ "$db_gui" != "" ];			then db=$db_gui ;fi
 	if [ "$db" 		= "dfltdb" ];	then db=$(getconfig_db parm_value defaultdatabase $label);fi
@@ -171,7 +171,6 @@ function ctrl_tb_gui () {
 	if [ "$where_gui" != "" ]; 		then where="$where_gui" ;fi
 	if [ "$where"   = "" ]; 		then where=$(getconfig_db parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes);fi 
 	if [ "$where" = "" ];			then where="limit $limit";fi
-	setmsg -i -d "$FUNCNAME\nfunc $func\ndb $db\ntb $tb \nwhere $where"
 	case "$func" in
 		"entry")   	echo $db ;;
 		"fselect") 	db=$(get_fileselect parm_value searchpath database)
@@ -189,7 +188,8 @@ function ctrl_tb_gui () {
 					echo $where
 					getconfig_db parm_value "%wherelist%" "${label}_${db}_${tb}" | remove_quotes | grep -vw "$where"
 					;;
-		"tree") 	tb_read_table $label "$db" $tb "$where" ;;
+		"tree") 	setmsg -i -d "$FUNCNAME\nfunc $func\ndb $db\ntb $tb \nwhere $where"
+					tb_read_table $label "$db" $tb "$where" ;;
 		"b_delete") ctrl_rc_gui "button_delete | $db | $tb | unknown | $row";;
 		"b_config")	setconfig_db "defaultwhere" "$parmtb $dbparm $parmtb" "where parm_field like \"%${db}_${tb}%\" or parm_type = \"config\" order by parm_type"
 					$rxvt -e $script $dbparm $parmtb --notable &  ;;
@@ -420,12 +420,12 @@ function tb_read_table() {
 	if [ "$export"  = "$true" ];then exportpath="$epath/export_${tb}_$(date "+%Y%m%d%H%M").csv" ;else exportpath="$epath/export_${tb}.csv";fi
 	if [ "$PRIMKEY" = "rowid" ];then srow="rowid," ;else srow="";fi
 	if [ "$label" 	= "$tb" ];	then off="off" ;else off="on"  ;fi					# jeder select wird archiviert
-	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;" | tr '|' ',' | tee "$exportpath" | tr ',' '|'
+	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;" | tee "$exportpath" 
 	error=$(<"$sqlerror")
 	if [ "$error"  != "" ];		then return 1;fi
 	if [ "$where" 	= "" ]; 	then return 0;fi 
 	setconfig_db "defaultwhere"  	"$label $db $tb" "$where" 
-	setconfig_db "wherelist $where" "$label $db $tb" "$where" 			
+	setconfig_db "wherelist $where" "$label $db $tb" "$where" 		
 }
 function ctrl_rc () {
 	log $FUNCNAME $*

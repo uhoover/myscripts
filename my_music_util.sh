@@ -8,19 +8,22 @@
 function xexit () {
 	if [ "$cmd" = "" ];then log stop;fi 
 }
-#	set -e
-	tagfile="/tmp/tag.txt"
-	headfile="/tmp/taghead.txt"
+	folder="$(basename $0)";path="$HOME/.${folder%%\.*}" 
+	[ ! -d "$path" ]     && mkdir "$path" 
+	tagfile="$path/tag.txt"
+	readfile="$path/find.txt"
+	headfile="$path/taghead.txt"
 	readpath="/home/uwe/my_scripts/resources/sql"
 	tmpf="/tmp/tmp.txt"
 	db="/home/uwe/my_databases/music.sqlite"
 	importtb="import"
 #
 function _amain () {
-	pparms=$*;parm=""
+	pparms=$*;parm="";path="/home/uwe/mnt/daten/music/"
 	log file start tlog
 	while [ "$#" -gt 0 ];do
 		case "$1" in
+	        "--path"|-p) 					 			shift;path="$1";;
 	        "--tlog"|-t|--show-log-with-tail)  			log tlog ;;
 	        "--debug"|-d)  				                log debug_on ;;
 	        "--version"|-v)  				            echo "version 1.0.0" ;;
@@ -32,10 +35,8 @@ function _amain () {
 	    esac
 	    shift
 	done
-	if [ "$parm" = "" ];then parm="/home/uwe/mnt/daten/music/Beethoven,Ludwig van/" ;fi
-     
-	read_path_to_import $parm
-  	import_tags
+	read_path_to_import $path
+#  	import_tags
 }
 function setmsg () { func_setmsg $*; }
 function sql_execute () { func_sql_execute $*; }
@@ -61,16 +62,14 @@ function import_tags () {
 function read_path_to_import () {
 	if [ ! -d "$*" ];then setmsg -w --width=300 "kein Ordner: $*" ;return  ;fi
 	[ -f "$tagfile" ] && rm "$tagfile" 
-	
- #   find "$*" -type f ;return
-    find "$*" -type f |  
+    find "$*" -type f > $readfile  
     while read -r file;do
 		log debug "file $file"
 		if [ "$zl" = "" ];then zl=0;zm=0;fi
 		zl=$((zl+1));zm=$((zm+1))
 		if [ "$zm" -gt "49" ];then log $zl $file;zm=0  ;fi
 		get_id3 $zl "$file" >> "$tagfile"
-	done  
+	done  < $readfile
 	log $FUNCNAME gelesen #$(wc -l $tagfile )
 }
 function get_id3 () {
@@ -80,10 +79,16 @@ function get_id3 () {
 		*) log debug "keine verarbeitung: $type $file";zl=$((zl-1));return
 	esac
 #	get_id3_ffprobe "$*" | cut -d "=" -f2 > $tmpf
-	get_id3_ffprobe "$file"  > $tmpf;echo "" >> $tmpf
+	get_id3_ffprobe "$file"  > $tmpf 2>$tmpf; echo "" >> $tmpf
 	declare -a arr=( null null null null null null null null null null null null null null null null null )
 	zc=0
 	while read -r args;do
+		if [ "${args:0:5}" = "title" ] || [ "${args:0:6}" = "artist" ] || [ "${args:0:5}" = "genre" ]  ||
+	       [ "${args:0:4}" = "date" ]  || [ "${args:0:5}" = "album" ]  || [ "${args:0:5}" = "track" ];then 
+			strf="${args%%\ *}"
+			strl="${args#*\:\ }"
+			args="format.tags."$strf"=\"$strl\""
+		fi
 	    tag=${args%%=*};arg=${args#*=};arg=$(echo $arg | tr -d '\\"')
 	    zc=$((zc+1))
 	    case "$tag" in
@@ -107,7 +112,13 @@ function get_id3 () {
 			*)  zc=$((zc-1))
 		esac
 	done  < "$tmpf"
- 	if [ "$zc" -lt "16" ];then log "$FUNCNAME zu wenig tags $zc tags $file";fi
+	if [ "${arg[10]}" = "null" ]; then
+	     title="${arr[0]##*\/}";arg[10]="${title%\.*}"
+	fi
+	if [ "${arg[12]}" = "null" ]; then
+	     file="${arr[0]%\/*}";arg[9]="${file##*\/}"
+	fi
+ 	if [ "$zc" -lt "16" ];then log debug "$FUNCNAME zu wenig tags $zc tags $file";fi
  	line="$zl";del=" | "
  	for arg in "${arr[@]}";do line=$line$del$arg;done
  	unset arr
@@ -141,8 +152,9 @@ function get_id3_alt () {
 	echo $line
 }
 function get_id3_ffprobe () {
-	ffprobe -loglevel quiet -show_format -print_format flat "$*"
+	ffprobe -show_format -print_format flat "$*"
 	if [ "$?" -gt "0" ];then log "$FUNCNAME error $? $*";fi
+#	ffprobe -loglevel quiet -show_format -print_format flat "$*"
 #	ffprobe -show_format -print_format json "$*"
 #	ffprobe -loglevel quiet -show_entries format_tags=album,artist,title "$*"
 #	ffprobe -loglevel quiet -show_entries format_tags=album,artist,title, -of default=noprint_wrappers=1:nokey=1 "$*"
