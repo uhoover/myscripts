@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS track;
 CREATE TABLE IF NOT EXISTS track(
   "track_id" 					INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
   "track_status"				INTEGER default 0,
@@ -25,4 +26,7 @@ CREATE TABLE IF NOT EXISTS track(
   "track_timestamp"				TEXT,
   "track_info"					TEXT default 'batch'
 );
-
+CREATE INDEX ix_track_album_id ON track (ref_album_id);
+CREATE INDEX ix_track_title_id ON track (ref_title_id);
+CREATE INDEX ix_track_composer_id ON track (ref_composer_id);
+CREATE INDEX ix_track_artist_id ON track (ref_artist_id);

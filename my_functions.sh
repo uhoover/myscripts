@@ -52,16 +52,18 @@ function func_setmsg () {
 	eval 'zenity' $parm $text 
 	return $?
 }
+function setmsg () { func_setmsg $* ; }
 function func_sql_execute () {
-	set -o noglob
+	set -o noglob 
 	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
 	local db="$1";shift;stmt="$@"
-	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror" | tr -d '\r'   
+	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
 	error=$(<"$sqlerror")
 	if [ "$error"  = "" ];then return 0;fi
 	setmsg -e --width=400 "sql_execute\n$error\n$db\n$stmt" 
 	return 1
 }
+function sql_execute () { func_sql_execute $* ; }
 function trap_init () {
     script="$0";script=${script##*\\};
     exec 4< /dev/stdin
@@ -1074,7 +1076,8 @@ function func_init () {
 	export w2linux="func_translate -i ':\,\' -o '/,/' /"
 }
 save_geometry (){
-	str=$*;window=${str%\#*};gfile=${str#*\#}
+#	str=$*;window=${str%\#*};gfile=${str#*\#}
+	str=$*;IFS='#';local arr=( $str );unset IFS; window=${arr[0]};gfile=${arr[1]};glabel=${arr[2]}
 	XWININFO=$(xwininfo -stats -name "$window")
 	if [ "$?" -ne "0" ];then func_setmsg -i "error XWINFO";return  ;fi
 	HEIGHT=$(echo "$XWININFO" | grep 'Height:' | awk '{print $2}')
@@ -1089,6 +1092,7 @@ save_geometry (){
 	echo "WIDTH=$WIDTH"    >> "$gfile"
 	echo "X=$X"            >> "$gfile"
 	echo "Y=$Y"            >> "$gfile"
+	setconfig_db "config" "$glabel" ${WIDTH}x${HEIGHT}+${X}+${Y}
 	chmod 700 "$gfile"
 }
 trap_init

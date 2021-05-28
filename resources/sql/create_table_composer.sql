@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS composer;
 CREATE TABLE IF NOT EXISTS composer(
   "composer_id" 					INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
   "composer_name"					TEXT UNIQUE,
