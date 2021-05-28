@@ -43,10 +43,11 @@ function file_verarbeitung_execute () {
 }
 function file_verarbeitung () {
 	log "file verarbeitung: $*"  
-	erg=$(zenity --list --text="'$*'" --column="action" "reload" "import" "execute")
+	erg=$(zenity --list --text="'$*'" --column="action" "reload" "import" "execute" "sql_execute")
 	log "gewaehlt $erg"
 	case "$erg" in
 		"execute") file_verarbeitung_execute	;;
+		"sql_execute") sql_call $*	;;
 		*) log "Abbruch"
 	esac
 	return
@@ -57,7 +58,6 @@ function file_verarbeitung () {
 function _amain () {
 	erg=$(wc -l $tmpf) 
 	zl=${erg%%\ *}
-	if [ "$zl" -gt 1 ];then file_verarbeitung;return;fi
 	erg=$1;func=${erg%%[\ \,\;]*}
 	thisdb="/home/uwe/my_databases/music.sqlite"
 	case "$func" in
@@ -65,6 +65,7 @@ function _amain () {
 		"sqlite3"|"sql_execute"|"func_sql_execute") sql_call $*;return;;
 	esac
 	log debug "func = $func"
+	if [ "$zl" -gt 1 ];then file_verarbeitung;return;fi
     erg="$(type -a $func)"
 	log debug "rc = $? erg = $erg"
 	if [ "$erg" != "" ]  ;then cmd_call $*;return  ;fi
@@ -74,7 +75,7 @@ function xexit() {
 	retcode=0 
 	log ende
 }
-	log file tlog 
+	log file tlog echo_on
 	tmpf="/tmp/parm.txt"
 	[ -f "$tmpf" ] && rm $tmpf
 	xclip -o    > $tmpf 

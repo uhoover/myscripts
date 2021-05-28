@@ -170,7 +170,7 @@ function ctrl_tb_gui () {
 	if [ "$tb"      = "" ];			then setmsg -w "keine Tabelle gefunden";exit;fi
 	if [ "$where_gui" != "" ]; 		then where="$where_gui" ;fi
 	if [ "$where"   = "" ]; 		then where=$(getconfig_db parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes);fi 
-	if [ "$where" = "" ];			then where="limit $limit";fi
+#	if [ "$where" = "" ];			then where="limit $limit";fi
 	case "$func" in
 		"entry")   	echo $db ;;
 		"fselect") 	db=$(get_fileselect parm_value searchpath database)
@@ -320,12 +320,16 @@ function tb_gui_get_xml() {
 				<action type="hide">BUTTONVIEW'$label'</action>
 			</button>
 			<button>
-				<label>config</label>
+				<label>settings</label>
 				<variable>BUTTONCONFIG'$label'</variable>
 				<action>'$script' --func ctrl_tb_gui "b_config | '$label' | '$db' | '$tb' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label'"</action>
 			</button>	
 		</hbox>
 		<hbox>
+			<button>
+				<label>workbench</label>
+				<action>xdg-open '$path' &</action>
+			</button>
 			<button>
 				<label>show terminal</label>
 				<variable>BUTTONSHOW'$label'</variable>
@@ -417,10 +421,15 @@ function tb_meta_info () {
 function tb_read_table() {
 	label="$1";shift;local db="$1";shift;local tb="$1";shift;where=$*  
 	tb_meta_info "$db" $tb
+	if [ "$where" != "" ] &&  [ $(pos limit "where") -gt -1 ]; then
+		xlimit="" 
+	else
+		xlimit="limit $limit"
+	fi
 	if [ "$export"  = "$true" ];then exportpath="$epath/export_${tb}_$(date "+%Y%m%d%H%M").csv" ;else exportpath="$epath/export_${tb}.csv";fi
 	if [ "$PRIMKEY" = "rowid" ];then srow="rowid," ;else srow="";fi
 	if [ "$label" 	= "$tb" ];	then off="off" ;else off="on"  ;fi					# jeder select wird archiviert
-	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where;" | tee "$exportpath" 
+	sql_execute $db ".separator |\n.header $off\nselect ${srow}* from $tb $where $xlimit;" | tee "$exportpath" 
 	error=$(<"$sqlerror")
 	if [ "$error"  != "" ];		then return 1;fi
 	if [ "$where" 	= "" ]; 	then return 0;fi 

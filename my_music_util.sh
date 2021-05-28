@@ -20,7 +20,7 @@ function xexit () {
 #
 function _amain () {
 	pparms=$*;parm="";path="/home/uwe/mnt/daten/music/"
-	log file start tlog
+	log file start tlog echo_on verbose_on
 	while [ "$#" -gt 0 ];do
 		case "$1" in
 	        "--path"|-p) 					 			shift;path="$1";;
@@ -36,11 +36,12 @@ function _amain () {
 	    shift
 	done
 	read_path_to_import $path
-#  	import_tags
+  	import_tags
 }
 function setmsg () { func_setmsg $*; }
 function sql_execute () { func_sql_execute $*; }
 function import_tags () {
+	log "starte import" 
  	sql_execute $db ".read $readpath/create_table_import.sql";if [ "$?" -gt "0" ];then return  ;fi
  	sql_execute $db ".separator '|'\n.import $tagfile import";if [ "$?" -gt "0" ];then return  ;fi
 	sql_execute $db ".read $readpath/create_table_track.sql";if [ "$?" -gt "0" ];then return  ;fi
@@ -58,8 +59,12 @@ function import_tags () {
             probe_score,\"$timestamp\",null \
          from import;"
 	sql_execute $db "$sql";if [ "$?" -gt "0" ];then return  ;fi
+	for tb in import track album title composer genre artist;do
+		log "$tb		: $(sql_execute $db '.header off\nselect count(*) from' $tb)" 
+	done
 }
 function read_path_to_import () {
+	log "starte get id3" 
 	if [ ! -d "$*" ];then setmsg -w --width=300 "kein Ordner: $*" ;return  ;fi
 	[ -f "$tagfile" ] && rm "$tagfile" 
     find "$*" -type f > $readfile  
@@ -119,35 +124,9 @@ function get_id3 () {
 	     file="${arr[0]%\/*}";arg[9]="${file##*\/}"
 	fi
  	if [ "$zc" -lt "16" ];then log debug "$FUNCNAME zu wenig tags $zc tags $file";fi
- 	line="$zl";del=" | "
+ 	line="$zl";del="|"
  	for arg in "${arr[@]}";do line=$line$del$arg;done
  	unset arr
- 	if [ "$line" = "" ];then return  ;fi
-	echo $line
-}
-function get_id3_alt () {
-	zl=$1;shift;file=$*;type="${file##*.}"
-	case "$type" in
-		"mp3"|"ogg"|"wav")	;;
-		*) log debug "keine verarbeitung: $type $file";zl=$((zl-1));return
-	esac
-#	get_id3_ffprobe "$*" | cut -d "=" -f2 > $tmpf
-	get_id3_ffprobe "$file"  > $tmpf;echo "" >> $tmpf
-	line="$zl";del="|";zc=0
-	while read -r args;do
-	    tag=${args%%=*};arg=${args#*=}
-	    if [ "$tag" = "format.tags.TYER" ]; then continue;fi
-	    zc=$((zc+1))
-	    if [ "$arg" = "" ];then arg="null"  ;fi
-	    arg=$(echo $arg | tr -d '|\\"'  )
-	    log debug $zc $tag $arg
-		line="$line$del$arg" 
-		if [ "$tag" = "format.tags.date" ]; then break;fi
-		if [ "${tag:0:22}" = "format.tags.id3v2_priv" ]; then break;fi
-	done  < "$tmpf"
- 	if [ "$zc"   = "16" ];then line="$line$delnull"   ;fi
-# 	if [ "$zc" -ne "17" ];then setmsg -i "$FUNCNAME $zc $file";exit   ;fi
- 	if [ "$zc" -ne "17" ];then log "$FUNCNAME error $zc tags $file";return   ;fi
  	if [ "$line" = "" ];then return  ;fi
 	echo $line
 }
@@ -173,7 +152,6 @@ function put_id3_ffprobe () {
 #    my_music_util.sh --func put_id3_ffprobe 12-Daybreak.mp3 12-Daybreak2.mp3 title tageslicht genre new_wave
 
 }
-
 	log file start
 	_amain  $*
 exit 
