@@ -39,7 +39,7 @@ function ctrl () {
 	export=$(getconfig_db "parm_value" "config" "export" "$false")
 	tmpf="$path/tmp/tmpfile.txt"   
 	pparms=$*
-	notable=$false;visible="true";myparm="";nowidgets="false";X=400;Y=600
+	notable=$false;myparm="";nowidgets="false";X=400;Y=600
 	ctrl_file
 	source $x_configfile
 	while [ "$#" -gt 0 ];do
@@ -129,6 +129,7 @@ function ctrl_tb () {
 	    xmlfile="${tpath}/${xfile}"
 	    wtitle=$(echo $wtitle $notebook | tr ' ' '-')
 		echo "<window title=\"$wtitle\" allow-shrink=\"true\">" > $xmlfile
+		if [ "${#arr[@]}" -lt "2" ];then visible="false" ;else visible="true" ;fi
 		echo "<notebook show-tabs=\"$visible\"  tab-labels=\""$(echo $notebook | tr '_ ' "-|")"\">" >> $xmlfile
 		for arg in "${arr[@]}" ;do
 			IFS='#';set -- $arg;unset IFS 
@@ -246,9 +247,9 @@ function tb_gui_get_xml() {
 	local label="$1";local db="$2";local tb="$3"
 	if [ "$label" = "$tb" ]; then
 		tb_meta_info "$db" "$tb"
-		lb=$(echo $TNAME | tr '_,' '-|');sensitiveCBOX="false";sensitiveFSELECT="false" 
+		lb=$(echo $TNAME | tr '_,' '-|');sensitiveCBOX="false";sensitiveFSELECT="false";sorttype=$TSORT 
 	else
-		lb=$(copies 30 '|');sensitiveCBOX="true";ID=0;sensitiveFSELECT="true"
+		lb=$(copies 30 '|');sensitiveCBOX="true";ID=0;sensitiveFSELECT="true";sorttype="1$(copies 29 '|0')"
 	fi
 	selection_mode=$(getconfig_db "parm_value" "config" "${label}_CBOXWH" "scroll")
 	if [ "$selection_mode" = "edit" ];
@@ -264,7 +265,8 @@ function tb_gui_get_xml() {
 	terminal="${tpath}/cmd_${label}.txt"
 	terminal_cmd "$terminal" "$label" "$db" 
 	echo '    <vbox>
-		<tree headers_visible="true" hover_selection="false" hover_expand="true" exported_column="'$ID'" sort-column="'$ID'" '$selected_row'>
+		<tree headers_visible="true" hover_selection="false" hover_expand="true" 
+		 exported_column="'$ID'" sort-column="'$ID'" column-sort-function="'$sorttype'" '$selected_row'>
 			<label>"'$lb'"</label>
 			<variable>TREE'$label'</variable>
 			<input>'$script' --func ctrl_tb_gui "tree | '$label' | '$db' | '$tb' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label' | $TBOXWH'$label'"</input>
@@ -409,7 +411,7 @@ function tb_meta_info () {
 	if [ "${parms:${#parms}-1:1}" = "," ];then parms="${parms}null"  ;fi          # letzter delimiter wird nicht als element erkannt
 	local parmlist=$(echo $parms | quote)
 	local del="";local del2="";local del3="";local line=""
-	TNAME="" ;TTYPE="" ;TNOTN="" ;TDFLT="" ;TPKEY="";TMETA="";TSELECT="";TUPDATE="";local ip=-1;local pk="-"
+	TNAME="" ;TTYPE="" ;TNOTN="" ;TDFLT="" ;TPKEY="";TMETA="";TSELECT="";TUPDATE="";TSORT="";local ip=-1;local pk="-"
 	sql_execute "$db" ".headers off\nPRAGMA table_info($tb)"   > $tmpf
 	if [ "$?" -gt "0" ];then log "$FUNCNAME error $?: $db" ".headers off\nPRAGMA table_info($tb)";return 1;fi
 	while read -r line;do
@@ -417,6 +419,7 @@ function tb_meta_info () {
 		TNAME=$TNAME$del"${arr[1]}";TTYPE=$TTYPE$del"${arr[2]}";TNOTN=$TNOTN$del"${arr[3]}"
 		TDFLT=$TDFLT$del"${arr[4]}";TPKEY=$TPKEY$del"${arr[5]}"
 		TMETA=$TMETA$del2"${arr[2]},${arr[3]},${arr[4]},${arr[5]}"
+		if [ "${arr[2]}" = "INTEGER" ] || [ "${arr[2]}" = "REAL" ] ;then TSORT="${TSORT}${del2}1";else TSORT="${TSORT}${del2}0";fi
 		if [ "${arr[5]}" = "1" ] ;then
 			PRIMKEY="${arr[1]}";export ID=$ip;  
 		else
@@ -427,7 +430,7 @@ function tb_meta_info () {
 	done < $tmpf
 	if [ "$PRIMKEY" = "" ];then 
 		PRIMKEY="rowid";ID=0
-		TNAME="rowid$del$TNAME";TTYPE="INTEGER$del$TTYPE";TNOTN="1$del$TNOTN";
+		TNAME="rowid$del$TNAME";TTYPE="INTEGER$del$TTYPE";TNOTN="1$del$TNOTN";TSORT="1$del2$TSORT"
 		TDFLT="' '$del$TDFLT";TPKEY="1$del$TPKEY";TMETA="rowid$del2$TMETA"
 	fi 
 	if [ "$parmlist" = "" ];then return;fi
