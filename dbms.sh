@@ -168,7 +168,12 @@ function ctrl_tb_gui () {
 	func=$(trim_value ${parm[0]});label=$(trim_value ${parm[1]});db=$(trim_value ${parm[2]});tb=$(trim_value ${parm[3]})
 	db_gui=$(trim_value ${parm[4]});tb_gui=$(trim_value ${parm[5]});where_gui=$(trim_value ${parm[6]});row=$(trim_value ${parm[7]})
 	where_gui_scroll=$(trim_value ${parm[7]})
- 	setmsg -i -d --width=600 "func $func\nlabel $label\ndb $db\ntb $tb\ndb_gui $db_gui\ntb_gui $tb_gui\nwhere_gui $where_gui\nrow $row"
+	selection_mode=$(getconfig_db "parm_value" "config" "${label}_CBOXWH" "scroll")
+	if [ "$selection_mode" = "edit" ];
+		then where_gui="$where_gui"  
+		else where_gui="$where_gui_scroll"  
+	fi
+	setmsg -i -d --width=600 "func $func\nmode $selection_mode\nlabel $label\ndb $db\ntb $tb\ndb_gui $db_gui\ntb_gui $tb_gui\nwhere_gui $where_gui\nrow $row"
 	found=$true 
 	if [ "$func"    = "entry" ];	then db_gui="" ;fi
 	if [ "$db_gui" != "" ];			then db=$db_gui ;fi
@@ -212,6 +217,7 @@ function ctrl_tb_gui () {
 		"b_config")	setconfig_db "defaultwhere" "$parmtb $dbparm $parmtb" "where parm_field like \"%${db}_${tb}%\" or parm_type = \"config\" order by parm_type"
 					$rxvt -e $script $dbparm $parmtb --notable &  ;;
 		"b_clone")	$rxvt -e $script $db	 $tb 	 --notable &  ;;
+		"b_insert")	ctrl_rc "insert" "$db" "$tb" ;;
 		*) 			setmsg -w "$func nicht bekannt"
 	esac	
 }
@@ -371,7 +377,7 @@ function tb_gui_get_xml() {
 			<button>
 				<label>insert</label>
 				<variable>BUTTONINSERT'$label'</variable>
-				<action>'$script' --func ctrl_tb_gui "b_clone | '$label' | '$db' | '$tb' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label'"</action>
+				<action>'$script' --func ctrl_tb_gui "b_insert | '$label' | '$db' | '$tb' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label'"</action>
 			</button>
 			<button visible="true">
 				<label>update</label>
