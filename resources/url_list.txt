@@ -1,0 +1,87 @@
+1live # 1LIVE (mp3, 128 kBit/s) # http://wdr-1live-live.icecast.wdr.de/wdr/1live/live/mp3/128/stream.mp3 # mp3
+1livediggi # 1LIVE DIGGI (mp3, 128 kBit/s) # http://wdr-1live-diggi.icecast.wdr.de/wdr/1live/diggi/mp3/128/stream.mp3 # mp3
+1liveplanb # 1LIVE PLAN B (Loop in mp3, 128 kBit/s) # http://wdr-1live-planb.icecast.wdr.de/wdr/1live/planb/mp3/128/stream.mp3 # mp3
+1livedjsession # 1LIVE DJ SESSION (Loop in mp3, 128 kBit/s) # http://wdr-1live-djsession.icecast.wdr.de/wdr/1live/djsession/mp3/128/stream.mp3 # mp3
+1liveneufÜrdensektor # 1LIVE NEU FÜR DEN SEKTOR (Loop in mp3, 128 kBit/s) # http://wdr-1live-neufuerdensektor.icecast.wdr.de/wdr/1live/neufuerdensektor/mp3/128/stream.mp3 # mp3
+1livehiphop # 1LIVE HIPHOP (Loop in mp3, 128 kBit/s) # http://wdr-1live-hiphop.icecast.wdr.de/wdr/1live/hiphop/mp3/128/stream.mp3 # mp3
+1livespecial # 1LIVE SPECIAL (Loop in mp3, 128 kBit/s) # http://wdr-1live-specials.icecast.wdr.de/wdr/1live/specials/mp3/128/stream.mp3 # mp3
+1livefiehe # 1LIVE FIEHE (Loop in mp3, 128 kBit/s) # http://wdr-1live-fiehe.icecast.wdr.de/wdr/1live/fiehe/mp3/128/stream.mp3 # mp3
+wdr2(rheinland) # WDR 2 (Rheinland) (mp3, 128 kBit/s) # http://wdr-wdr2-rheinland.icecast.wdr.de/wdr/wdr2/rheinland/mp3/128/stream.mp3 # mp3
+wdr2(ostwestfalen-lippe) # WDR 2 (Ostwestfalen-Lippe) (mp3, 128 kBit/s) # http://wdr-wdr2-ostwestfalenlippe.icecast.wdr.de/wdr/wdr2/ostwestfalenlippe/mp3/128/stream.mp3 # mp3
+wdr2(münsterland) # WDR 2 (Münsterland) (mp3, 128 kBit/s) # http://wdr-wdr2-muensterland.icecast.wdr.de/wdr/wdr2/muensterland/mp3/128/stream.mp3 # mp3
+wdr2(ruhrgebiet) # WDR 2 (Ruhrgebiet) (mp3, 128 kBit/s) # http://wdr-wdr2-ruhrgebiet.icecast.wdr.de/wdr/wdr2/ruhrgebiet/mp3/128/stream.mp3 # mp3
+wdr2(rheinundruhr) # WDR 2 (Rhein und Ruhr) (mp3, 128 kBit/s) # http://wdr-wdr2-rheinruhr.icecast.wdr.de/wdr/wdr2/rheinruhr/mp3/128/stream.mp3 # mp3
+wdr2(bergischesland) # WDR 2 (Bergisches Land) (mp3, 128 kBit/s) # http://wdr-wdr2-bergischesland.icecast.wdr.de/wdr/wdr2/bergischesland/mp3/128/stream.mp3 # mp3
+wdr2(südwestfalen) # WDR 2 (Südwestfalen) (mp3, 128 kBit/s) # http://wdr-wdr2-suedwestfalen.icecast.wdr.de/wdr/wdr2/suedwestfalen/mp3/128/stream.mp3 # mp3
+wdr2(aachenundregion) # WDR 2 (Aachen und Region) (mp3, 128 kBit/s) # http://wdr-wdr2-aachenundregion.icecast.wdr.de/wdr/wdr2/aachenundregion/mp3/128/stream.mp3 # mp3
+wdr3 # WDR 3 (mp3, 128 kBit/s) # http://wdr-wdr3-live.icecast.wdr.de/wdr/wdr3/live/mp3/128/stream.mp3 # mp3
+wdr3 # WDR 3 (mp3, 256 kBit/s) # http://wdr-wdr3-live.icecast.wdr.de/wdr/wdr3/live/mp3/256/stream.mp3 # mp3
+wdr4 # WDR 4 (mp3, 128 kBit/s) # http://wdr-wdr4-live.icecast.wdr.de/wdr/wdr4/live/mp3/128/stream.mp3 # mp3
+wdr5 # WDR 5 (mp3, 128 kBit/s) # http://wdr-wdr5-live.icecast.wdr.de/wdr/wdr5/live/mp3/128/stream.mp3 # mp3
+wdrcosmo # WDR COSMO (mp3, 128 kBit/s) # http://wdr-cosmo-live.icecast.wdr.de/wdr/cosmo/live/mp3/128/stream.mp3 # mp3
+wdrcosmoal-sautal-arabi[mo-fr18-18.30uhr] # WDR COSMO Al-Saut Al-Arabi [Mo-Fr 18-18.30 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-alsautalarabi.icecast.wdr.de/wdr/cosmo/alsautalarabi/mp3/128/stream.mp3 # mp3
+wdrcosmobernamakurdi[so18-19uhr] # WDR COSMO Bernama Kurdi [So 18-19 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-bernamakurdikoelnradyosu.icecast.wdr.de/wdr/cosmo/bernamakurdikoelnradyosu/mp3/128/stream.mp3 # mp3
+wdrcosmoellinikorandevou[so18-19uhr] # WDR COSMO Elliniko Randevou [So 18-19 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-ellinikorandevouradioforum.icecast.wdr.de/wdr/cosmo/ellinikorandevouradioforum/mp3/128/stream.mp3 # mp3
+wdrcosmoestaciónsur[so18-19uhr] # WDR COSMO Estación Sur [So 18-19 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-estacionsurradiocolonia.icecast.wdr.de/wdr/cosmo/estacionsurradiocolonia/mp3/128/stream.mp3 # mp3
+wdrcosmokölnradyosu[mo-fr18-18.30uhr] # WDR COSMO Köln Radyosu [Mo-Fr 18-18.30 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-bernamakurdikoelnradyosu.icecast.wdr.de/wdr/cosmo/bernamakurdikoelnradyosu/mp3/128/stream.mp3 # mp3
+wdrcosmolive # WDR COSMO Live (Loop, mp3, 128 kBit/s) # http://wdr-cosmo-coslive.icecast.wdr.de/wdr/cosmo/coslive/mp3/128/stream.mp3 # mp3
+wdrcosmoradiopo-russki[mo-fr18-18.30uhr] # WDR COSMO Radio po-russki [Mo-Fr 18-18.30 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-porusskievent.icecast.wdr.de/wdr/cosmo/porusskievent/mp3/128/stream.mp3 # mp3
+wdrcosmoradiopopolsku[mo-fr18-18.30uhr] # WDR COSMO Radio po polsku [Mo-Fr 18-18.30 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-popolskuevent.icecast.wdr.de/wdr/cosmo/popolskuevent/mp3/128/stream.mp3 # mp3
+wdrcosmoradioforum[mo-fr18-18.30uhr] # WDR COSMO Radio Forum [Mo-Fr 18-18.30 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-ellinikorandevouradioforum.icecast.wdr.de/wdr/cosmo/ellinikorandevouradioforum/mp3/128/stream.mp3 # mp3
+wdrcosmoradiocolonia[mo-fr18-18.30uhr] # WDR COSMO Radio Colonia [Mo-Fr 18-18.30 Uhr] (mp3, 128 kBit/s) # http://wdr-cosmo-estacionsurradiocolonia.icecast.wdr.de/wdr/cosmo/estacionsurradiocolonia/mp3/128/stream.mp3 # mp3
+selektor # Selektor (Loop, mp3, 128 kBit/s) # http://wdr-cosmo-selektor.icecast.wdr.de/wdr/cosmo/selektor/mp3/128/stream.mp3 # mp3
+diemaus # Die Maus (mp3, 128 kBit/s) # https://wdr-diemaus-live.icecastssl.wdr.de/wdr/diemaus/live/mp3/128/stream.mp3 # mp3
+diemaus # Die Maus (mp3, 56 kBit/s) # https://wdr-diemaus-live.icecastssl.wdr.de/wdr/diemaus/live/mp3/56/stream.mp3 # mp3
+wdrevent # WDR Event (mp3, 128kBit/s) # http://wdr-wdr-event.icecast.wdr.de/wdr/wdr/event/mp3/128/stream.mp3 # mp3
+wdrvera # WDR VERA (mp3) # http://wdr-vera-live.icecast.wdr.de/wdr/vera/live/mp3/128/stream.mp3 # mp3
+deutschlandfunk # "deutschlandfunk # https://st01.sslstream.dlf.de/dlf/01/128/mp3/stream.mp3 # mp3
+deutschlandfunk # "deutschlandfunk # https://st01.sslstream.dlf.de/dlf/01/64/mp3/stream.mp3 # mp3
+deutschlandfunk # "deutschlandfunk # https://st01.sslstream.dlf.de/dlf/01/mid/aac/stream.aac # mp3
+deutschlandfunk # "deutschlandfunk # https://st01.sslstream.dlf.de/dlf/01/low/aac/stream.aac  # mp3
+deutschlandfunk # "deutschlandfunk # https://st01.sslstream.dlf.de/dlf/01/high/opus/stream.opus # mp3
+deutschlandfunk # "deutschlandfunk # https://st01.sslstream.dlf.de/dlf/01/low/opus/stream.opus # mp3
+dradiokultur # "dradiokultur # https://st02.sslstream.dlf.de/dlf/02/128/mp3/stream.mp3 # mp3
+dradiokultur # "dradiokultur # https://st02.sslstream.dlf.de/dlf/02/64/mp3/stream.mp3 # mp3
+dradiokultur # "dradiokultur # https://st02.sslstream.dlf.de/dlf/02/mid/aac/stream.aac # mp3
+dradiokultur # "dradiokultur # https://st02.sslstream.dlf.de/dlf/02/low/aac/stream.aac # mp3
+dradiokultur # "dradiokultur # https://st02.sslstream.dlf.de/dlf/02/high/opus/stream.opus # mp3
+dradiokultur # "dradiokultur # https://st02.sslstream.dlf.de/dlf/02/low/opus/stream.opus # mp3
+dradiowissen # "dradiowissen # https://st03.sslstream.dlf.de/dlf/03/128/mp3/stream.mp3 # mp3
+dradiowissen # "dradiowissen # https://st03.sslstream.dlf.de/dlf/03/64/mp3/stream.mp3 # mp3
+dradiowissen # "dradiowissen # https://st03.sslstream.dlf.de/dlf/03/mid/aac/stream.aac # mp3
+dradiowissen # "dradiowissen # https://st03.sslstream.dlf.de/dlf/03/low/aac/stream.aac # mp3
+dradiowissen # "dradiowissen # https://st03.sslstream.dlf.de/dlf/03/high/opus/stream.opus # mp3
+dradiowissen # "dradiowissen # https://st03.sslstream.dlf.de/dlf/03/low/opus/stream.opus # mp3
+deutschlandradio # "deutschlandradio # https://st04.sslstream.dlf.de/dlf/04/128/mp3/stream.mp3 # mp3
+deutschlandradio # "deutschlandradio # https://st04.sslstream.dlf.de/dlf/04/64/mp3/stream.mp3 # mp3
+deutschlandradio # "deutschlandradio # https://st04.sslstream.dlf.de/dlf/04/mid/aac/stream.aac # mp3
+deutschlandradio # "deutschlandradio # https://st04.sslstream.dlf.de/dlf/04/low/aac/stream.aac # mp3
+daserste # Das Erste HD # https://mcdn.daserste.de/daserste/de/master.m3u8 # mp4
+zdf # ZDF HD # https://zdf-hls-15.akamaized.net/hls/live/2016498/de/high/master.m3u8 # mp4
+zdfinfo # ZDFinfo # https://zdf-hls-17.akamaized.net/hls/live/2016500/de/high/master.m3u8 # mp4
+arte # ARTE # https://artelive-lh.akamaihd.net/i/artelive_de@393591/master.m3u8 # mp4
+3sat # 3Sat # https://zdf-hls-18.akamaized.net/hls/live/2016501/dach/high/master.m3u8 # mp4
+servustv # ServusTV HD # https://rbmn-live.akamaized.net/hls/live/2002830/geoSTVDEweb/master.m3u8 # mp4
+zdfneo # ZDFneo # https://zdf-hls-16.akamaized.net/hls/live/2016499/de/high/master.m3u8 # mp4
+one # ONE HD # https://onelivestream-lh.akamaihd.net/i/one_livestream@568814/master.m3u8 # mp4
+radiobrementv # Radio Bremen TV HD # https://rbfs-lh.akamaihd.net/i/rb_fs@438960/master.m3u8 # mp4
+ndrniedersachsen # NDR Niedersachsen # https://ndrfs-lh.akamaihd.net/i/ndrfs_nds@430233/master.m3u8 # mp4
+wdrkoeln # WDR Koeln # https://wdrfs247.akamaized.net/hls/live/681509/wdr_msl4_fs247/master.m3u8 # mp4
+hr # HR # https://hrlive1-lh.akamaihd.net/i/hr_fernsehen@75910/master.m3u8 # mp4
+mdrsachsen # MDR SACHSEN # https://mdrtvsnhls.akamaized.net/hls/live/2016928/mdrtvsn/master.m3u8 # mp4
+mdrsachsen-anhalt # MDR SACHSEN-ANHALT # https://mdrtvsahls.akamaized.net/hls/live/2016879/mdrtvsa/master.m3u8 # mp4
+mdrthÜringen # MDR THÜRINGEN # https://mdrtvthhls.akamaized.net/hls/live/2016880/mdrtvth/master.m3u8 # mp4
+rbbberlin # rbb Berlin # https://rbblive-lh.akamaihd.net/i/rbb_berlin@144674/master.m3u8 # mp4
+swrbw # SWR BW # https://swrbwhls-i.akamaihd.net/hls/live/667638-b/swrbwd/master.m3u8 # mp4
+srfernsehen # SR Fernsehen # https://srlive24-lh.akamaihd.net/i/sr_universal02@107595/master.m3u8 # mp4
+brfernsehen # BR Fernsehen # https://mcdn.br.de/bfs_sued/de/master.m3u8 # mp4
+ard-alpha # ARD-alpha # https://brlive-lh.akamaihd.net/i/bralpha_germany@119899/master.m3u8 # mp4
+tagesschau24 # tagesschau24 # https://tagesschau-lh.akamaihd.net/i/tagesschau_1@119231/master.m3u8 # mp4
+phoenix # Phoenix # https://zdf-hls-19.akamaized.net/hls/live/2016502/de/high/master.m3u8 # mp4
+euronews # EURONEWS # https://rakuten-euronews-5-de.samsung.wurl.com/manifest/playlist.m3u8 # mp4
+welt # WELT # https://live2weltcms-lh.akamaihd.net/i/Live2WeltCMS_1@444563/master.m3u8 # mp4
+weltlivestream # WELT Live Stream # https://eventenc02-lh.akamaihd.net/i/eventenc02_1@379038/index_1_av-p.m3u8 # mp4
+deutschewelle # Deutsche Welle # https://dwstream6-lh.akamaihd.net/i/dwstream6_live@123962/master.m3u8 # mp4
+deutschewelle+ # Deutsche Welle+ # http://dwstream52-lh.akamaihd.net/i/dwstream52_live@500528/index_1_av-p.m3u8 # mp4
+skysportnews # Sky Sport News HD # https://websitefreestreaming.akamaized.net/11111_ssnweb/index.m3u8 # mp4
+&quot;kika&quot; # &quot;Kika&quot; # https://kikageohls.akamaized.net/hls/live/2022693/livetvkika_de/master.m3u8 # mp4
