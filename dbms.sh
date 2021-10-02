@@ -719,10 +719,10 @@ function rc_sql_execute () {
 function setmsg () { func_setmsg $*; }
 function get_field_name () { echo $(readlink -f "$*") | tr -d '/.'; }
 function get_fileselect () {
-	getfield="$1";shift;type="$1";shift;field="$*" 
+	getfield="$1";shift;type="$1";shift;field="$1";shift;save="$*" 
 	path=$(getconfig_db $getfield $type "$field")
 	if [ "$path" = "" ];	then path=$HOME;fi
-	mydb=$(zenity --file-selection --title "select $type" --filename=$path)
+	mydb=$(zenity --file-selection $save --title "select $type" --filename=$path)
 	if [ "$mydb" = "" ];	then echo "";return 1;fi
 	setconfig_db "searchpath" "$field" "$mydb"  
 	echo $mydb 

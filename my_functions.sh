@@ -22,6 +22,38 @@
 		declare -t sqlerror="/tmp/sqlerror.txt"
 		declare -t music="$HOME/my_databases/music.sqlite"
 		export MYPATH="$HOME/my_scripts"
+function func_tb_meta_info () {
+	local db="$1";shift;local tb="$1";shift;local row=$1;shift;local parms=$(echo $* | tr '#|' ',,' )
+	if [ "${parms:${#parms}-1:1}" = "," ];then parms="${parms}null"  ;fi          # letzter delimiter wird nicht als element erkannt
+	local parmlist=$(echo $parms | quote)
+	local del="";local del2="";local del3="";local line=""
+	TNAME="" ;TTYPE="" ;TNOTN="" ;TDFLT="" ;TPKEY="";TMETA="";TSELECT="";TUPDATE="";TSORT="";local ip=-1;local pk="-"
+	sql_execute "$db" ".headers off\nPRAGMA table_info($tb)"   > $tmpf
+	if [ "$?" -gt "0" ];then log "$FUNCNAME error $?: $db" ".headers off\nPRAGMA table_info($tb)";return 1;fi
+	while read -r line;do
+		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
+		TNAME=$TNAME$del"${arr[1]}";TTYPE=$TTYPE$del"${arr[2]}";TNOTN=$TNOTN$del"${arr[3]}"
+		TDFLT=$TDFLT$del"${arr[4]}";TPKEY=$TPKEY$del"${arr[5]}"
+		TMETA=$TMETA$del2"${arr[2]},${arr[3]},${arr[4]},${arr[5]}"
+		if [ "${arr[2]}" = "INTEGER" ] || [ "${arr[2]}" = "REAL" ] ;then TSORT="${TSORT}${del2}1";else TSORT="${TSORT}${del2}0";fi
+		if [ "${arr[5]}" = "1" ] ;then
+			PRIMKEY="${arr[1]}";export ID=$ip;  
+		else
+			TSELECT=$TSELECT$del3$"${arr[1]}" 	
+			TUPDATE=$TUPDATE$del3$"${arr[1]} = %s";del3=","	
+		fi
+		del=",";del2='|'
+	done < $tmpf
+	if [ "$PRIMKEY" = "" ];then 
+		PRIMKEY="rowid";ID=0
+		TNAME="rowid$del$TNAME";TTYPE="INTEGER$del$TTYPE";TNOTN="1$del$TNOTN";TSORT="1$del2$TSORT"
+		TDFLT="' '$del$TDFLT";TPKEY="1$del$TPKEY";TMETA="rowid$del2$TMETA"
+	fi 
+	if [ "$parmlist" = "" ];then return;fi
+	parmlist=${parmlist//'"null"'/null}
+	TINSERT="insert into $tb ($TSELECT) values ($parmlist)"
+	IFS=",";TUPDATE="update $tb set "$(printf "${TUPDATE}\n" $parmlist)" where $PRIMKEY = $row";unset IFS
+}
 function func_help () {
     [ $# -gt 1 ] && echo "         Wert unzulaessig: $2"
     echo "         $1 -- usage:"
