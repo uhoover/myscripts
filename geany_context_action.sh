@@ -5,22 +5,38 @@
 #
 	set -o noglob
  source /home/uwe/my_scripts/my_functions.sh
-
-#	trap xexit EXIT
-#	set -e  # bei fehler sprung nach xexit
 #
-function msg () {
-	zenity --notification --text="$*"
+function aexit() {
+	retcode=0 
 }
-function f_79789789886083_20210210113916 () { # sqlite select * from genre where genre_id < 5 
-0,"neuer Pfad",Info 
-1,Blues, 
-2,Classic Rock 
-3,Country,NULLer 
-4,Dance, 
-} 
-function sql_call () { # ".headers on\nselect * from genre where genre_id > 140 and genre_id < 145"
-#	trap 'set +x;trap_at $LINENO 26;set -x' DEBUG
+	trap aexit EXIT
+#	set -e  # bei fehler sprung nach xexit
+# 
+function ctrl () {
+	parm=$*
+	log file tlog echo_o
+	tmpf="/tmp/parm.txt"
+	[ -f "$tmpf" ] && rm $tmpf
+	xclip -o    > $tmpf 
+	if [ "$#" -lt "1" ];then read erg < $tmpf; set -- $erg ;fi
+	if [ "$#" -lt "1" ] || [ "$*" = "" ];then log "Abbruch: keine Parameter";exit ;fi
+	erg=$(wc -l $tmpf) 
+	zl=${erg%%\ *}
+	erg=$1;func=${erg%%[\ \,\;]*}
+	thisdb="/home/uwe/my_databases/music.sqlite"
+	case "$func" in
+		"select"|"update"|"insert"|"delete"|".import"|"reload"|".mode"|".headers"|"-header") sql_call sql_execute "$thisdb" "$parm";return;;
+		"sqlite3"|"sql_execute"|"func_sql_execute") sql_call $parm;return;;
+	esac
+	if [ "$zl" -gt 1 ];then file_verarbeitung;return;fi
+    erg="$(type -a $func)"
+	log debug "rc = $? erg = $erg"
+	if [ "$erg" != "" ]  ;then cmd_call $*;return  ;fi
+	file_verarbeitung $*
+	echo "all done"
+	read -p 'weiter mit taste'
+}
+function sql_call () { #  '.headers on \\nselect * from genre where genre_id > 140'
 	dn=$(date "+%Y%m%d%H%M%S")
 	di=$((99999999999999-$dn))
 	log "f_${di}_${dn}" '() { # sqlite' "$@"	
@@ -55,34 +71,4 @@ function file_verarbeitung () {
 	   log "= $line"
 	done < $tmpf
 }
-function _amain () {
-	erg=$(wc -l $tmpf) 
-	zl=${erg%%\ *}
-	erg=$1;func=${erg%%[\ \,\;]*}
-	thisdb="/home/uwe/my_databases/music.sqlite"
-	case "$func" in
-		"select"|"update"|"insert"|"delete"|".import"|"reload"|".mode"|".header") sql_call sql_execute "$thisdb" $*;return;;
-		"sqlite3"|"sql_execute"|"func_sql_execute") sql_call $*;return;;
-	esac
-	log debug "func = $func"
-	if [ "$zl" -gt 1 ];then file_verarbeitung;return;fi
-    erg="$(type -a $func)"
-	log debug "rc = $? erg = $erg"
-	if [ "$erg" != "" ]  ;then cmd_call $*;return  ;fi
-	file_verarbeitung $*
-}
-function xexit() {
-	retcode=0 
-	log ende
-}
-	log file tlog echo_on
-	tmpf="/tmp/parm.txt"
-	[ -f "$tmpf" ] && rm $tmpf
-	xclip -o    > $tmpf 
-	if [ "$#" -lt "1" ];then read erg < $tmpf; set -- $erg ;fi
-	if [ "$#" -lt "1" ] || [ "$*" = "" ];then log "Abbruch: keine Parameter";exit ;fi
-	_amain $* 
-	echo "all done"
-	read -p 'weiter mit taste'
-	exit
-#	 select * from track limit 10 
+    ctrl $*
