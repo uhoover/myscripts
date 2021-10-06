@@ -202,9 +202,11 @@ function ctrl_tb_gui () {
 					return ;;
 		"cboxtb") 	if [ "$label" = "$tb" ];then echo $tb;return;fi
 					if [ "$db" = "" ];	then setmsg -e "keine Datenbank gefunden";return;fi 
-					tb=$(getconfig_db parm_value defaulttable "${label}_${db}") 
+					tb=$(getconfig_db parm_value defaulttable "${label}_${db}")
+					is_table $db $tb;if [ "$?" -gt 0 ];then tb="";fi 
 		            if [ "$tb" != "" ];then echo $tb; else tb=" ";fi
 		            tb_get_tables "$db" "batch" | grep -vw "$tb" ;;
+		"b_managetb") ctrl_manage_tb "$db" $tb;;
 		"cboxwh") 	#trap 'set +x;trap_at $LINENO 182;set -x' DEBUG
 					where=$(getconfig_db parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes);
 					if [ "$where" = "" ];then where=" ";fi
@@ -310,6 +312,12 @@ function tb_gui_get_xml() {
 				<action type="clear">TREE'$label'</action>
 				<action type="refresh">TREE'$label'</action>
 			</comboboxtext>	
+			<button visible="'$sensitiveCBOX'">
+				<label>manage tb</label>
+				<action>'$script' --func ctrl_tb_gui "b_managetb | '$label' | '$db' | '$tb' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label'"</action>
+				<action type="clear">CBOXTB'$label'</action>
+				<action type="refresh">CBOXTB'$label'</action>
+			</button>
 		</hbox>
 		<hbox>
 			<comboboxentry space-expand="true" space-fill="true" allow-empty="true" visible="'$visibleCBOXWH'">
@@ -352,7 +360,7 @@ function tb_gui_get_xml() {
 		</hbox>
 		<hbox>
 			<button>
-				<label>workbench</label>
+				<label>workdir</label>
 				<action>xdg-open '$path' &</action>
 			</button>
 			<button>
@@ -499,7 +507,7 @@ function ctrl_rc_gui () {
 							fi 
 							value=$(getconfig_db "parm_value" "rc_field" "${db}_${tb}_${key}" "" "and parm_status < 9" | remove_quotes)	 
 							if [ "$value" != ""  ];then echo $value ;return;fi
-							IFS=',';meta=$(trim_value ${parm[6]});unset IFS
+							IFS=',';meta=$(trim_value ${parm[6]});unset IFS 
 							if   [ "${meta[4]}" != "" ];      then  echo "${meta[4]}"  
 							elif [ "${meta[3]}" = "0" ];  	  then  echo  NULL  
 							elif [ "${meta[2]}" = "INTEGER" ];then  echo "0"   
@@ -508,8 +516,9 @@ function ctrl_rc_gui () {
 		 "button_back")   	rc_sql_execute "$db" "$tb" "lt" 	"$field" "$key" ;;
 		 "button_next")   	rc_sql_execute "$db" "$tb" "gt" 	"$field" "$key" ;;
 		 "button_read")   	rc_sql_execute "$db" "$tb" "eq" 	"$field" "$key" ;;
-		 "button_insert")   rc_sql_execute "$db" "$tb" "insert" "$field" "$key" "$values"
-							max=$(sql_execute "$db" ".header off\nselect max($key)")
+		 "button_insert")   if [ "$key" = "" ];then key="0";fi
+							rc_sql_execute "$db" "$tb" "insert" "$field" "$key" "$values"
+							max=$(sql_execute "$db" ".header off\nselect max($field) from $tb")
 		                    if [ "$max" != "" ];then rc_sql_execute "$db" "$tb" "eq" 	"$field" "$max";fi ;;
 		 "button_update")   rc_sql_execute "$db" "$tb" "update" "$field" "$key" "$values" ;;
 		 "button_delete")   setmsg -q "$field=$key wirklich loeschen ?"
@@ -645,7 +654,7 @@ function rc_gui_get_xml () {
 	for label in back next read insert update delete clear refresh;do
 		echo '		<button><label>'$label'</label>'
 		echo '			<action>'$script' --func ctrl_rc_gui "button_'$label'  | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
-        if [ "$label" != "update" ] && [ "$label" != "insert" ];then rc_entrys_refresh;fi  
+        if [ "$label" != "update" ] ;then rc_entrys_refresh;fi  
 		echo '		</button>'
 	done
 	echo '	<button>'
@@ -687,6 +696,205 @@ function rc_gui_get_cmd() {
 	unset IFS
 	return $found
 }
+function ctrl_manage_tb () {
+	db="$1";tb=$2;func="$3";drop=$false;create=$false;edit=$false;newtable=$false 
+#	db="/home/uwe/my_databases/test.sqlite";ntb="mytable_neu";nfunc="modify"
+#	db="/home/uwe/my_databases/music.sqlite";tb="track";func="edit"
+	if [ "$func" = "" ]; then func=$(zenity --list --column action "drop" "schema" "modify" "new_table" "import");fi
+	if [ "$(echo $func | grep 'drop')"	 	!= "" ]; 	then drop=$true										;fi 
+	if [ "$(echo $func | grep 'schema')" 	!= "" ]; 	then create=$true									;fi 
+	if [ "$(echo $func | grep 'modify')" 	!= "" ]; 	then edit=$true;create=$true						;fi 
+	if [ "$(echo $func | grep 'new_table')" != "" ]; 	then tb=$(zenity --text "enter table name" --entry) ;fi 
+	if [ "$(echo $func | grep 'new_table')" != "" ]; 	then edit=$true;create=$true;newtable=$true 		;fi 
+	if [ "$(echo $func | grep 'import')" != "" ]; 		then import=$true;	else import=$false;	fi 
+	if [ "$db" = "" ];then db=$(dbms.sh --func get_fileselect parm_value searchpath database --save);fi
+	if [ "$db" = "" ];then setmsg -n "abort..no db selected"; exit ;fi
+	if [ -f "$db" ] && [ "$tb" = "" ]; then tb=$(zenity --text "neu ueberschreiben " --list --editable --column tabelle $(echo ".tables" | sqlite3 $db) "new");fi 
+	if [ "$tb" = "" ] || [ "$tb" = "new" ];then tb=$(zenity --text "neue Tabelle" --entry) ;fi
+	if [ "$tb" = "" ];then setmsg -n "abort..no tb selected"; exit ;fi
+	crtb="edit_$tb"
+	readfile="$sqlpath/read_${tb}.txt"
+	readcrtb="$sqlpath/tmp_${crtb}_read.txt"
+	meta_info_file="$sqlpath/tmp_${crtb}_meta_info.txt"
+	import="/home/uwe/.dbms/import/my_table.csv"
+###	
+	if 	[ "$drop" = "$true" ]; then
+		msg="delete $tb from $db"
+		echo "	drop table if exists $tb;" > $readfile
+	fi
+	if  [ "$create" = "$true" ]; then
+		setmsg -i "create"
+		found=$(echo ".tables $tb" | sqlite3 $db)
+		if [ "$found" = "" ]; then
+			func_sql_execute "$db" "create table $tb (${tb}_id  integer primary key autoincrement not null unique,${tb}_name	text);"
+			edit=$true
+			echo "	drop table if exists $tb;" 					>  $readfile
+		else
+			echo "	drop table   if     exists ${tb}_copy;" 	>  $readfile
+			echo "	alter table $tb rename to ${tb}_copy;"		>> $readfile
+			echo "	drop table if exists $tb;" 					>> $readfile
+
+		fi
+		func_tb_meta_info "$db" $tb;TINSERT=$TSELECT; cp $tmpf $meta_info_file 
+		if [ "$edit" = "$true" ]; then	
+			manage_tb_modify "$db" "$tb" 						>> $readfile
+		else
+			sql_execute $db  ".schema $tb"  					>> $readfile 
+		fi
+		if [ "$found" != "" ]; then
+			echo "	insert into $tb  ($TSELECT) " 				>> $readfile
+			echo "	select            $TSELECT " 				>> $readfile
+			echo "	from ${tb}_copy;" 							>> $readfile
+		fi
+		xdg-open $readfile
+		msg="execute $readfile ?" 
+	fi	
+		setmsg -q "$msg" 
+		if [ "$?" = "1" ];then 
+#			setmsg -n Abbruch;return
+			return
+		else
+ 			if [ "$drop" = "$true" ];then 
+				stmt="delete from $parmtb where parm_type='defaulttable' and parm_field like \"%${db}%\" and parm_value = \"$tb\"" 
+				sql_execute "$dbparm" "$stmt" 
+			fi
+			sql_execute $db ".read $readfile" 
+			return 
+		fi
+		setmsg -q "${tb}_copy loeschen?" 
+		if [ "$?" = "0" ];then sql_execute $db "drop table if exists ${tb}_copy;";fi	 
+ 
+}
+function manage_tb_modify () {
+	db="$1";tb="$2" 
+##### create tmp table to store table-info
+	echo "drop table if exists $crtb;" > $readcrtb  
+	echo "create table   $crtb ( " \
+	     "crtb_id        integer primary key autoincrement not null unique," \
+	     "pos            integer not null," \
+	     "field          text	 not null unique," \
+	     "type           text    not null default \"text\"," \
+	     "nullable       text,	 default_value  	text,	primarykey   text," \
+	     "auto_increment text,	 isunique		text,	ixname		 text," \
+	     "ref_field		 text,	 ref_table 	    text,	on_delete  	 text,	on_update   	 text);" >> $readcrtb  
+	echo "insert into $crtb (pos,field,type,nullable,default_value,primarykey) values" >> $readcrtb
+###	table info
+	while read -r line;do
+	    IFS=",";fields=( $line );unset IFS;nline="";del=""
+	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
+			arr=$(echo ${fields[$ia]} | tr -d '"' | tr -d "'")
+			if [ "$arr" = "0" ];then arr=""  ;fi
+			case "$ia" in
+				3)		if [ "$arr"  = "1" ];then  arr="not null" ;fi;;
+				5)	    if [ "$arr"  = "1" ];then  arr="primary key";fi;;
+				*)  
+			esac
+			nline="$nline$del\"$arr\"";del=","
+		done
+		echo "${delim}(${nline})" >> $readcrtb 
+		delim=","
+	done < $meta_info_file
+	echo ";" >> $readcrtb
+###	index info
+	sql_execute "$db" "pragma index_list($tb)" |  tr '[:upper:]' '[:lower:]' |
+    while read line; do
+		IFS=",";arr=($line);printf "${arr[1]},${arr[2]},${arr[3]},"
+		sql_execute "$db" "pragma index_info(${arr[1]})" |  tr '[:upper:]' '[:lower:]'  
+	done |	
+    while read line; do
+		IFS=",";arr=($line);unset IFS;del=","
+		stmt="set"  
+		if [ "${arr[0]:0:16}" != "sqlite_autoindex" ];then  stmt="set ixname=\"${arr[0]}\"";else stmt="set";del=" ";fi
+		if [ "${arr[2]}" = "u" ];then  stmt="${stmt}${del}isunique=\"unique\"";del=",";fi
+		echo "update $crtb $stmt where field=\"${arr[5]}\";" >> $readcrtb
+	done 
+	echo "update $crtb set auto_increment = \"autoincrement\" where primarykey = 'primary key' and type = 'integer';" >> $readcrtb
+###	foreign key info
+	sql_execute "$db" "pragma foreign_key_list($tb)" |  tr '[:upper:]' '[:lower:]' |
+    while read line; do
+		IFS=",";arr=($line) 
+		echo "update $crtb set ref_table = \"${arr[2]}\", ref_field = \"${arr[4]}\"," \
+			 "on_update = \"${arr[5]}\", on_delete = \"${arr[6]}\" where field = \"${arr[3]}\";" >> $readcrtb
+	done  
+    sql_execute "$dbparm" ".read $readcrtb"
+    if [ "$?" -gt "0" ];then return 1;fi
+##### user action modify table
+	"$script" "$dbparm" $crtb "--notable" 1> /dev/null
+##### create file for .read
+	echo "-- "
+	echo "    create table $tb ("
+	export del="   "
+#	[ -f "$meta_info_file" ] && rm $meta_info_file
+	stmt="select field,type,primarykey,auto_increment,nullable,isunique,default_value,
+		 ixname,ref_table,ref_field,on_delete,on_update,pos from $crtb;"  
+	sql_execute "/home/uwe/my_databases/parm.sqlite" "$stmt"  |  tr -d '"' |
+	while read -r line;do
+		IFS=",";fields=( $line );unset IFS;nline="$del";if [ "$nline" = "" ];then nline=" "  ;fi
+	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
+			arr=$(echo ${fields[$ia]})  
+			case "$arr" in
+				 null)			arr='' ;;
+				 "no action")	arr='' ;;
+				*)  
+			esac
+			case "$ia" in
+				6)	   if [ "$arr"  != "" ];then  arr="default \"$arr\"";fi;;
+				7)	   if [ "$arr"  != "" ];then
+						   if [ "${fields[5]}"  != "" ];then  
+								echo "create#unique#index#$arr ${fields[0]}" >> $meta_info_file 
+						   else echo "create#index#$arr ${fields[0]}" >> $meta_info_file
+						   fi
+						   continue
+					   fi;;
+				8)	   if [ "$arr"  != "" ];then
+							echo "foreign#key#${fields[8]}|$(right -t ${fields[12]} -l 4 -p '0')|${fields[0]}|${fields[8]}|${fields[9]}|${fields[10]}|${fields[11]}" >> $meta_info_file
+					   fi
+					   break;; 				   
+				*)  
+			esac
+			nline="$nline $arr";del="      ,"
+		done
+		echo "    "$(echo $nline | tr -s ' ')
+	done
+	if 	[ -f  "$meta_info_file" ];then  
+		[ -f "$tmpf" ] && rm "$tmpf" 
+		grep "foreign#" "$meta_info_file" | sort   > "$tmpf" 	
+		if 	[ -f  "$tmpf" ];then 
+			nline="";old="";reftb="";from="";to="";ondelete="";onupdate=""
+			while read -r line;do
+				IFS='|';fields=($line);unset IFS
+				if [ "${fields[0]}"  != "$old" ];then
+					if [ "$from" != "" ];then  echo "  ,foreign key(${from}) references ${reftb}(${to}) $ondelete $onupdate "  ;fi
+					from="${fields[2]}";reftb="${fields[3]}";to="${fields[4]}"
+					if [ "${fields[5]}" != "" ] && [ "${fields[5]}" != "no action" ];then ondelete="on delete ${fields[5]}" ;else ondelete="" ;fi
+					if [ "${fields[6]}" != "" ] && [ "${fields[6]}" != "no action" ];then onupdate="on update ${fields[6]}" ;else onupdate="" ;fi
+					old="${fields[0]}"
+				else
+					from="${from},${fields[2]}"
+					to="${to},${fields[4]}"
+				fi 
+			done < "$tmpf"
+		fi
+		if [ "$from" != "" ];then  echo "  ,foreign key(${from}) references ${reftb}(${to}) $ondelete $onupdate "   ;fi
+	fi
+	echo "	);"
+	nline="";old=""
+	grep "create#" "$meta_info_file" | sort   > "$tmpf" 
+	while read -r line;do
+		fields=($line)
+		if [ "${fields[0]}"  != "$old" ];then
+			old="${fields[0]}"
+			if [ "$nline" != "" ];then echo "	drop index if exists ${old##*\#};"; echo "	${nline});" | tr '#' ' ' ;fi
+			nline="${fields[0]} on ${tb}(""${fields[1]}"
+		else
+			nline="${nline},${fields[1]}"
+		fi 
+	done < "$tmpf"
+	if [ "$nline" != "" ];then  echo "	drop index if exists ${old##*\#};";echo "	${nline});"  | tr '#' ' '  ;fi
+### trigger info
+	sql_execute $db "select sql from sqlite_master where type = \"trigger\" and tbl_name = \"$tb\";" |  tr -d '"' | tr '[:upper:]' '[:lower:]'  
+	echo "--"
+}
 function rc_sql_execute () {
 	log debug $FUNCNAME $@
 	db=$1;shift;tb=$1;shift;local mode=$1;shift;PRIMKEY=$1;shift;row=$1;shift	
@@ -711,7 +919,7 @@ function rc_sql_execute () {
 	if [ "$mode" = "update" ];	then setmsg -n "success update";return  ;fi
 	if [ "$erg"  = ""  ];		then setmsg -i "keine id $mode $row gefunden"  ;return 1;fi
     echo -e "$erg" > "$tmpf"
-    sql_execute "$dbparm" "delete from $parmtb where parm_field like \"$db $tb %\" and parm_type = \"rc_field\"" 
+    sql_execute "$dbparm" "delete from $parmtb where parm_field like \"${db}_${tb}%\" and parm_type = \"rc_field\"" 
     while read -r line;do
 		setconfig_db "rc_field" "${db} ${tb} $(trim_value ${line%%\=*})" "$(trim_value ${line##*\=})"
 	done < "$tmpf"
