@@ -1,9 +1,58 @@
 #!/bin/bash
 	source /home/uwe/my_scripts/my_functions.sh
 
-/home/uwe/my_scripts/dbms.sh --func ctrl_manage_tb
-exit
-
+#/home/uwe/my_scripts/dbms.sh --func ctrl_manage_tb
+#exit
+function func_import () {
+	db="$1";tb="$2";file="$3";func="$4";local delim="$5";tbcopy="${tb}_tmp"
+	readfile="/home/uwe/tmp/readfile.txt"
+	func_tb_meta_info "$db" "$tb"
+	hl=$(head $file -n 1 | tr [:upper:] [:lower:])
+	il=$(echo $TSELECT | tr ',' "$delim" | tr [:upper:] [:lower:])
+	rl=$(echo $TNAME   | tr ',' "$delim" | tr [:upper:] [:lower:]) 
+	IFS="$delim";ahl=( $hl );ail=( $il );arl=( $rl );unset IFS
+	zhl="${#ahl[@]}";zil="${#ail[@]}";zrl="${#arl[@]}";
+	if [ "${hl:${#hl}-1:1}" = "$delim" ];then zhl=$(($zhl+1))  ;fi ## last empty element not count
+#	echo "header $zhl echo ${ahl[$zhl-1]} iline $zil uline $zrl"
+	if 	 [ "$hl"  = "$il"  ]; then func="insert" 
+	elif [ "$hl"  = "$rl"  ]; then func="update" 
+	elif [ "$zhl" = "$zil" ]; then echo "$il" > $tmpf; cat $file >> $tmpf;file="$tmpf";func="insert" 
+	elif [ "$zhl" = "$zrl" ]; then echo "$rl" > $tmpf; cat $file >> $tmpf;file="$tmpf";func="update"  
+	fi
+ 	if [ "$func" = "update" ]; then
+		del="";line="";for ((ia=0;ia<${#arl[@]};ia++)) ;do line="$line${del}${tbcopy}.${arl[$ia]}";del=",";done
+		echo ".separator $delim"				>   "$readfile"
+		echo "drop table if exists tmp;"  		>>  "$readfile"
+		echo ".import $file tmp"				>>  "$readfile"
+		echo "drop table if exists $tbcopy;"  	>>  "$readfile"
+		sql_execute "$db" ".schema $tb" | tr [:upper:] [:lower:] |
+		while read -r line;do
+			erg=$(echo $line | grep 'create' | grep 'table')
+			if [ "$erg" = "" ]; then
+				nline=$line
+			else
+				nline=${line//$tb/$tbcopy}
+			fi
+			zline=${nline%%\;*}
+			if [ "$nline" != "$zline" ];then 
+				echo "$zline ;" 				>>  "$readfile"
+				break
+			else 
+				echo $nline  					>>  "$readfile"
+			fi
+		done
+		echo "insert into $tbcopy select * from tmp;"	>>  "$readfile"
+		echo "insert or replace into $tb"		>>  "$readfile"
+		echo "select $line"						>>  "$readfile"
+		echo "from $tbcopy join $tb on ${tbcopy}.$PRIMKEY = ${tb}.$PRIMKEY;"	>>  "$readfile"
+		echo "insert into $tb select $line from $tbcopy"	>>  "$readfile"
+		echo "where ${tbcopy}.${PRIMKEY} in ("					>>  "$readfile"
+		echo "	select  a.${PRIMKEY} from $tbcopy as a "					>>  "$readfile"
+		echo "	left join $tb as b  "					>>  "$readfile"
+		echo "	on a.${PRIMKEY} = b.${PRIMKEY}"					>>  "$readfile"
+		echo "	where b.${PRIMKEY} is null);"					>>  "$readfile"
+	fi
+}
 function create_tb () {
 
 	db="$1";tb="$2" 
@@ -142,7 +191,7 @@ function create_tb () {
 }
 	db="$1";tb=$2;func="$3";true=0;false=1
 #	db="/home/uwe/my_databases/test.sqlite";tb="mytable_neu";func="edit"
-	db="/home/uwe/my_databases/music.sqlite";tb="track";nfunc="edit"
+	db="/home/uwe/my_databases/test.sqlite";tb="composer";func="import"
 	if [ "$func" = "" ]; then func=$(zenity --list --column action "drop" "schema" "modify" "new_table" "import");fi
 	if [ "$(echo $func | grep 'drop')"	 	!= "" ]; 	then drop=$true;				else drop=$false;	fi 
 	if [ "$(echo $func | grep 'schema')" 	!= "" ]; 	then create=$true;				else create=$false;	fi 
@@ -157,7 +206,10 @@ function create_tb () {
 	if [ "$tb" = "" ];then setmsg -n "abort..no tb selected"; exit ;fi
 	tmpf="/tmp/create_tb.txt"
 	tmpf2="/tmp/create_tb2.txt"
-	import="/home/uwe/.dbms/import/my_table.csv"
+	ifile="/home/uwe/tmp/create_tb.txt"
+	if [ "$import" = "$true" ]; then
+		func_import "$db" "$tb" "$ifile" "$func" "|"
+	fi
 	if [ "$create" = "$true" ]; then
 		found=$(echo ".tables $tb" | sqlite3 $db)
 		if [ "$found" = "" ]; then
