@@ -67,6 +67,40 @@ function ctrl () {
 	done
 	ctrl_tb $myparm	
 }
+function ctrl_rules() {
+	is_table "$1" "$2"; if [ $? -lt 1 ]; then return;fi 
+	local db="$1";local tb="$2"
+	cat << EOF > $sqlpath/create_table_${tb}.sql
+	drop table if exists $tb;
+	create table $tb(
+  "rules_id" 					INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
+  "rules_status"				INTEGER not null default '0',
+  "rules_name"					TEXT,
+  "rules_type"					TEXT not null default 'liste',
+  "rules_db"					TEXT not null,
+  "rules_tb"					TEXT not null,
+  "rules_field"					TEXT not null,
+  "rules_db_ref"				TEXT,
+  "rules_tb_ref"				TEXT,
+  "rules_action"				TEXT,
+  "rules_parms"			    	TEXT,
+  "rules_receive_list"			TEXT,
+  "rules_info"					TEXT
+);
+create unique index ix_rules_dbtbfield on rules(rules_db,rules_tb,rules_field);
+insert into $tb values 
+insert into rules values
+ (1,0,'rules_type_liste','liste','/home/uwe/my_databases/parm.sqlite','rules','''rules_type''','','','liste@reference@table@fileselect@command','null','0','liste from string, separator must be @') 
+,(2,0,'rules_db_fileselect','fileselect','/home/uwe/my_databases/parm.sqlite','rules','rules_db',NULL,NULL,'',NULL,'0','erste regel fuer fileselect')
+,(3,0,'rules_db_reference','reference','/home/uwe/my_databases/parm.sqlite','rules','''rules_status''','/home/uwe/my_databases/parm.sqlite','parms','select parm_value from parms where parm_type = ''status'' and substr(parm_value,1,instr(parm_value,'' '' )-1)','','0','reference with complex sql')
+,(4,0,'rules_tb_command','command','/home/uwe/my_databases/parm.sqlite','rules','''rules_tb''','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules gettables 4','','0','get list of table names from command dbms.sh; command needs rules_id to reed the row')
+,(5,0,'rules_db_fileselect','fileselect','/home/uwe/my_databases/parm.sqlite','rules','rules_db_ref','','','','','0','fileselect')
+,(6,0,'rules_tb_command','command','/home/uwe/my_databases/parm.sqlite','rules','''rules_tb_ref','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules gettables 4','','0','get list of table names from command dbms.sh; command needs rules_id to reed the row')
+,(7,0,'rules_tb_command','command','/home/uwe/my_databases/parm.sqlite','rules','''rules_field''','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules getfields 7','','0','get list of table field names from command dbms.sh; command needs rules_id to reed the row')
+;
+EOF
+    sql_execute "db" ".read" "$sqlpath/create_table_${tb}.sql"
+}
 function ctrl_master() {
 	is_table "$1" "$2"; if [ $? -lt 1 ]; then return;fi 
 	local db="$1";local tb="$2";ix=-1
@@ -1142,7 +1176,6 @@ function x_read_csv () {
 }
 function cmd_rules () {
 	local func="$1" id="$2" field="$3" tb=""
-	set +x
 	case "$func" in
 		 "gettables")   if [ "$field" = "rules_tb" ];then ref=''  ;else ref='_ref'''  ;fi
 					    erg=$(sql_execute $dbparm ".headers off\nselect rules_db${ref},rules_tb${ref} from rules where rules_id = $id"  | tr '|,' '  ')
@@ -1155,7 +1188,7 @@ function cmd_rules () {
 						echo $field
 						if [ "$db" = "" ] || [ "$tb" = "" ];then return  ;fi
 						sql_execute $db "pragma table_info($tb)"  | cut -d ',' -f2 | grep -v $field	;;
-		*) setmsg -i "$FUNCNAME\nfunc not known $func"
+		*) setmsg -i   "$FUNCNAME\nfunc not known $func"
 	esac
 }
 function zz () { return; } 
