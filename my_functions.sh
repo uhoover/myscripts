@@ -78,7 +78,7 @@ function func_setmsg () {
 		esac
 		shift
 	done
-#	text=$(echo $text | tr '"<>' '___')
+	text=$(echo $text | tr '"<>' '_' | tr "'" '_')
 	if [ "$text" != "" ];then text="--text='$text'" ;fi
 	eval "$oldstate"
 	eval 'zenity' $parm $text 
@@ -86,13 +86,14 @@ function func_setmsg () {
 }
 function setmsg () { func_setmsg $* ; }
 function func_sql_execute () {
-	lcmd=$(echo !!);set -o noglob 
+	set -o noglob 
 	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
 	local db="$1";shift;stmt="$@"
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
 	error=$(<"$sqlerror")
 	if [ "$error"  = "" ];then return 0;fi
-	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt\nlcmd $lcmd" 
+	log $FUNCNAME $stmt
+	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
 	return 1
 }
 function sql_execute () { func_sql_execute $* ; }
