@@ -12,96 +12,30 @@ function axit() {
   	if [ "$cmd" = "" ]; then log stop;fi
 }
 function ftest () {
-	db=$1;tb=$2
-	tb_meta_info "$db" "$tb"
-	sizetlabel=20;sizeentry=36;sizetext=46;ref_entry=""
-	stmt="select * from rules where rules_db = \"$db\" and rules_tb = \"$tb\" and rules_status < 9"
-	sql_execute $dbparm ".mode line\n$stmt" > $tmpf2	
-    IFS=",";name=($TNAME);unset IFS;IFS="|";meta=($TMETA);unset IFS
-	echo '<vbox hscrollbar-policy="0" vscrollbar-policy="0" space-expand="true" scrollable="true">'
-	echo '	<vbox space-expand="false">'
-	echo '		<hbox>'
-	echo '			<entry width_chars="'$sizeentry'" space-fill="true">'
-	echo '				<variable>entryp</variable>'
-	echo '				<input>'$script' --func ctrl_rc_gui "entryp | '$db '|' $tb '|' ${PRIMKEY} '|' ${name[$ID]} '|' ${meta[$ID]}'"</input>'
-	echo '			</entry>'
-	echo '			<text width-chars="46" justify="3"><label>'$PRIMKEY' (PK) (type,null,default,primkey)</label></text>'
-	echo '		</hbox>'
-	echo '	</vbox>'
-	echo '	<vbox>'
-    entrys="";del=""
-   	for ((ia=0;ia<${#name[@]};ia++)) ;do
-		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
-		if [ "${name[$ia]}" = "rowid" ];then continue ;fi
-		rc_gui_get_rule "$db" "$tb" "${name[$ia]}"
-		if [ "$?" = "$true" ];then func=$FUNC;visible="false" ;else func="";visible="true";fi
-		echo    '		<hbox>' 
-		IFS='#';set -- $cmd;unset IFS
-		IFS=";";action=($ACTION);unset IFS
-		if  [ "$func" = "" ] || [ "$func" = "fileselect" ] ; then  
-					
-			echo    ' 			<entry width_chars="'$sizeentry'" space-fill="true" auto-refresh="true">'  
-			echo    ' 				<variable>entry'$ia'</variable>' 
-			echo    ' 				<sensitive>'"$visible"'</sensitive>' 
-			echo    ' 				<input file>"'${tpath}/rc_field_$(echo "${db}_${tb}_${name[$ia]}" | tr '/. ' '_')'"</input>' 
-			echo    ' 			</entry>' 
-		else
-            echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true">'
-			echo 	' 				<variable>entry'$ia'</variable>'
-#			echo  	' 				<sensitive>false</sensitive>'
-			echo    ' 				<input file>"'${tpath}/rc_field_$(echo "${db}_${tb}_${name[$ia]}" | tr '/. ' '_')'"</input>' 
-			for arg in "${action[@]}" ;do
-				button="${arg%%\@*}";cmd="${arg##*\@}"
-				if [ "$button" = "action" ]; then
-					echo "			<action>$cmd</action>"
-				fi
-			done
-		  	echo  	'			</comboboxtext>'
-		fi
-		if  [ "$func" = "fileselect" ] ; then  
-			echo	'	        <button>'
-			echo	'				<input file stock="gtk-open"></input>'
-    		echo	' 				<action>'$script' --func ctrl_rc_gui "fileselect  | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia'"</action>'
-			for arg in "${action[@]}" ;do
-				button="${arg%%\@*}";cmd="${arg##*\@}"
-				setmsg -i "button $button\naction $action"
-				if [ "$button" = "action" ]; then
-					echo "				<action>$cmd  | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia'</action>"
-				fi
-			done			
-			echo	'			</button>'
-		fi
-		for arg in "${action[@]}" ;do
-			button="${arg%%\@*}";cmd="${arg##*\@}"
-			setmsg -i -d --width=700 "name ${name[$ia]}\nbutton $arg\ncmd $cmd"
-			if [ "$button" != "$cmd" ] && [ "$button" != "action" ]; then
-				echo "			<button>"
-				echo	'			<input file stock="gtk-media-play"></input>'
-				echo "				<label>$button</label>"
-				echo "				<action>$cmd  | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia'</action>"
-				echo "			</button>"
-			fi
-		done	
-		echo  	' 			<text width-chars="'$sizetext'" justify="3"><label>'${name[$ia]}' ('${meta[$ia]}')</label></text>'   
-		echo    '		</hbox>' 
+	local db="$1" tb="$2" field="$3" tag="$4" ACTION=${@:5}
+#	rc_gui_get_rule "$db" "$tb" "$field"
+	IFS=";";action=($ACTION);unset IFS
+	for arg in "${action[@]}" ;do
+		echo $arg
+		func="${arg%\@*}"
+		cmd="${arg##*\@}"
+		for f in ${func//@/ };do 
+		    set -- ${f//#/ }
+		    f="$1";l="$2";i="$3"
+			if [ "$f" != "$tag" ];then continue  ;fi
+			case "$tag" in
+				"button") 	echo						"	        <button>"
+							if [ "$l" != "" ];then echo	"	        	<label>$l<label>"  ;fi
+							if [ "$i" != "" ];then echo	"	        	<input file stock=\"$i\"></input>"  ;fi
+							echo						"	        	<action>$cmd</action>"  
+							echo						"	        </button>"  
+						;;
+				*)  		echo						"	        	<$tag>$cmd</$tag>"  
+			esac
+#			echo $f $cmd
+		done
 	done
-	echo '	</vbox>'
-	echo '	<hbox>'
-	for label in back next read insert update delete clear refresh;do
-		echo '		<button><label>'$label'</label>'
-		echo '			<action>'$script' --func ctrl_rc_gui "button_'$label'  | '$db '|' $tb '|' $PRIMKEY '| $entryp | '$entrys'"</action>'
-        if [ "$label" != "update" ] ;then 	
-			echo '			<action type="refresh">entryp</action>'
-		fi  
-		echo '		</button>'
-	done
-	echo '	<button>'
-	echo '		<label>exit</label>'
-	echo '		<action>'$script' --func save_geometry "'"${wtitle}#${geometryfile}#${geometrylabel}"'"</action>'	
-	echo '		<action type="exit">CLOSE</action>'
-	echo '	</button>'
-	echo '	</hbox>'
-	echo '</vbox>'  
+	return
 }
 function ctrl () {
 	log file tlog 
@@ -180,13 +114,13 @@ function ctrl_rules() {
 create unique index ix_rules_dbtbfield on rules(rules_db,rules_tb,rules_field);
 insert into $tb values 
 insert into rules values
- (1,0,'rules_type_liste','liste','/home/uwe/my_databases/parm.sqlite','rules','''rules_type''','','','liste@reference@table@fileselect@command','null','0','liste from string, separator must be @') 
+ (1,0,'rules_type_liste','liste','/home/uwe/my_databases/parm.sqlite','rules','''rules_type''','','','liste@reference@table@fileselect@comand','null','0','liste from string, separator must be @') 
 ,(2,0,'rules_db_fileselect','fileselect','/home/uwe/my_databases/parm.sqlite','rules','rules_db',NULL,NULL,'',NULL,'0','erste regel fuer fileselect')
 ,(3,0,'rules_db_reference','reference','/home/uwe/my_databases/parm.sqlite','rules','''rules_status''','/home/uwe/my_databases/parm.sqlite','parms','select parm_value from parms where parm_type = ''status'' and substr(parm_value,1,instr(parm_value,'' '' )-1)','','0','reference with complex sql')
-,(4,0,'rules_tb_command','command','/home/uwe/my_databases/parm.sqlite','rules','''rules_tb''','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules gettables 4','','0','get list of table names from command dbms.sh; command needs rules_id to reed the row')
+,(4,0,'rules_tb_comand','comand','/home/uwe/my_databases/parm.sqlite','rules','''rules_tb''','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules gettables 4','','0','get list of table names from comand dbms.sh; comand needs rules_id to reed the row')
 ,(5,0,'rules_db_fileselect','fileselect','/home/uwe/my_databases/parm.sqlite','rules','rules_db_ref','','','','','0','fileselect')
-,(6,0,'rules_tb_command','command','/home/uwe/my_databases/parm.sqlite','rules','''rules_tb_ref','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules gettables 4','','0','get list of table names from command dbms.sh; command needs rules_id to reed the row')
-,(7,0,'rules_tb_command','command','/home/uwe/my_databases/parm.sqlite','rules','''rules_field''','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules getfields 7','','0','get list of table field names from command dbms.sh; command needs rules_id to reed the row')
+,(6,0,'rules_tb_comand','comand','/home/uwe/my_databases/parm.sqlite','rules','''rules_tb_ref','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules gettables 4','','0','get list of table names from comand dbms.sh; comand needs rules_id to reed the row')
+,(7,0,'rules_tb_comand','comand','/home/uwe/my_databases/parm.sqlite','rules','''rules_field''','','','/home/uwe/my_scripts/dbms.sh --func cmd_rules getfields 7','','0','get list of table field names from comand dbms.sh; comand needs rules_id to reed the row')
 ;
 EOF
     sql_execute "db" ".read" "$sqlpath/create_table_${tb}.sql"
@@ -574,11 +508,6 @@ function ctrl_rc () {
 	row="$1";shift;db="$1";shift;tb="$@"
 	tb_meta_info "$db" "$tb"
 	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME\nerror Meta-Info\n$db\n$tb";return ;fi
-	#~ if [ "$row" = "insert" ]; then
-		#~ ctrl_rc_gui "button_clear | $db | $tb"
-	#~ else
-		#~ rc_sql_execute $db $tb eq $PRIMKEY $row 
-	#~ fi
 	geometrylabel="geometry_rc_$tb"
 	geometryfile="$tpath/${geometrylabel}.txt"
     row_change_xml="$path/tmp/change_row_${tb}.xml"	
@@ -601,27 +530,25 @@ function ctrl_rc_gui () {
 	local pid=$(trim_value ${parm[6]})   values=$(trim_value ${parm[7]})
 	msg=""
 	tb_meta_info $db $tb
-	file="${tpath}/rc_field_${pid}_${field}_"$(echo "${db}_${tb}" | tr '/. ' '_')	
+	file=$(get_input_filename "$db" "$tb" "$field" "$pid") 
 	setmsg -i -d --width=600 "$FUNCNAME\ndb $db\ntb $tb\nfield $field\nkey $key\nmeta $meta\npid $pid\nvalues $values"				
 	case $func in
-		 "entryp")   		if [ "$id" = "insert" ]; then
-								sql_execute "$db" ".headers off\nselect max($PRIMKEY) + 1 from $tb"
+		 "entryp")   		[ "$key" != "" ] && id="$key" ||  id=$(getconfig_db parm_value defaultrow "${db}_${tb}_${pid}")
+							if [ "$id" = "insert" ]; then
+								id=$(sql_execute "$db" ".headers off\nselect max($PRIMKEY) + 1 from $tb")
 								mode="clear"
 							else
 								mode="normal"
-							fi
-							id=$(getconfig_db parm_value defaultrow "${db}_${tb}_${pid}")
+							fi							
 							if [ "$id" = "" ];then id=$(sql_execute $db ".headers off\nselect $PRIMKEY from $tb limit 1");fi
 							echo $id
-							stmt="select * from rules where rules_db = \"$db\" and rules_tb = \"$tb\" and rules_status < 9"
-							sql_execute $dbparm ".mode line\n$stmt" > "${rulesfile}${tb}_$(echo $db | tr '/' '_').txt"
 							rc_read_tb "$mode" "$db" "$tb" "$pid" "$PRIMKEY" "$id";;
 		 "button_back")   	rc_sql_execute "$db" "$tb" "lt" 	"$field" "$key" "$pid";;
 		 "button_next")   	rc_sql_execute "$db" "$tb" "gt" 	"$field" "$key" "$pid";;
 		 "button_read")   	rc_sql_execute "$db" "$tb" "eq" 	"$field" "$key" "$pid";;
 		 "button_insert")   rc_sql_execute "$db" "$tb" "insert" "$field" "$key" "$pid" "$values"
 							if [ $? -eq 0 ];then 
-								rc_sql_execute "$db" "$tb" "eq"   	"$field" 
+								rc_sql_execute "$db" "$tb" "eq" "$field" 
 								$(getconfig_db defaultrow parm_value "${db}_${tb}_${pid}") "$pid" "$values"
 							fi;;
 		 "button_update")   rc_sql_execute "$db" "$tb" "update" "$field" "$key" "$pid" "$values" ;;
@@ -635,42 +562,14 @@ function ctrl_rc_gui () {
 							if [ $? -eq 0 ];then  return;else setmsg -n $msg"no row lower   $key found"  ;fi
 							;;
 		 "button_clear")   	rc_read_tb "clear" "$db" "$tb" "$pid" "$PRIMKEY" "$key" ;;
-		 "cbox_a")        	rc_gui_get_rule "$db" "$tb" "$key"		  					
-							if [ "$FUNC" = "liste" ];then SCMD2="$LCMD"  ;fi
-							if [ "$FUNC" = "table" ];then 
-								$rxvt -e $script "$SDB" "$STB" "--notable" 
-								values=$(getconfig_db parm_value defaultrow "${STB}_${SDB}_${STB}" |  tr -d '"' )
-								setmsg -q "wert $values uebernehme?" 
-								if [ "$?" != "0" ];then return ;fi
-								if [ "$values" = "" ];then return 1;fi
-							fi 
-							erg=$(set_rc_value_extra "$key" "$SCMD2" "$values")
-							setconfig_db   "rc_field|$db $tb $key|$erg"
-		                    ;;
 		 "fileselect") 	    sfile=$(get_fileselect "rule_selectdb")
 							if [ "$?" -gt "0" ];then log "$FUNCNAME Suche abgebrochen";return  ;fi
-							echo "$sfile" > "${tpath}/rc_field_${pid}_${field}_"$(echo "${db}_${tb}" | tr '/. ' '_')
-							rc_gui_get_rule "$db" "$tb" "$field"
-							if [ "$?" = "$false" ];then return  ;fi
-							if [ "$SCMD1" = "" ];then return  ;fi
-							cmd="${SCMD1/action@/}"
-							$cmd "|" "$db" "|" "$tb" "|" "$pid" "|" "$PRIMKEY" "|" "$id" "|" "$field" "|" "$key" "|" "$file" 
+							echo "$sfile" > $(get_input_filename "$db" "$tb" "$field" "$pid") 
 							;;		
-		 "command") 		rc_gui_get_rule "$db" "$tb" "$field"
+		 "comand") 			rc_gui_get_rule "$db" "$tb" "$field"
 							if [ "$?" = "$false" ];then return  ;fi
-							if [ "$SCMD1" = "" ];then return  ;fi
-							IFS=";";action=($ACTION);unset IFS
-							for arg in "${action[@]}" ;do
-								button="${arg%%\@*}";cmd="${arg##*\@}"
-								if [ "$button" = "$cmd" ]; then continue;fi
-								setmsg -i -d --width=600 "$FUNCNAME command\ndb $db\ntb $tb\nfield $field\nkey $key\nmeta $meta\npid $pid\nvalues $values"				
-								$cmd "| $db | $tb | $pid | $PRIMKEY | $id | $field | $key | $file"  
-							done
-							;;		
-		 "action") 		    rc_gui_get_rule "$db" "$tb" "$field"
-							cmd="${SCMD1/action@/}"
-							$cmd "|" "$db" "|" "$tb" "|" "$pid" "|" "$PRIMKEY" "|" "$id" "|" "$field" "|" "$key" "|" "$file";; 
-#							$ACTION "$entry" ;;
+							if [ "$ACTION" = "" ];then return  ;fi
+							rc_gui_rules "exe" "action" "$db" "$tb" "$field" "$key" "$meta" "$pid" "$ACTION";;
 		 *) 				setmsg -i   --width=400 "func $func nicht bekannt\ndb $db\ntb $tb\n$field\nentry $entry"
 	esac
 }
@@ -689,7 +588,101 @@ function ctrl_rc_gui_defaults () {
 		echo "${name[$ia]} = $field" 
     done
 }
+function rc_gui_rules () {
+	local mode="$1" tag="$2" db="$3" tb="$4" field="$5" entry="$6" meta="$7" pid="$8" ACTION=${@:9} 
+	xparm="$script --func ctrl_rc_gui \"comand | $db | $tb | $field | $entry | $meta | $pid\""
+	local ftag="" label="" icon="" func="" action="" cmd="" arg=""
+	IFS=";";action=($ACTION);unset IFS
+	for arg in "${action[@]}" ;do
+		func="${arg%\@*}"
+		cmd="${arg##*\@}"
+		for ftag in ${func//@/ };do 
+		    set -- ${ftag//#/ }
+		    ftag="$1";label="$2";icon="$3"
+			if [ "$ftag" != "$tag" ];then continue  ;fi
+			if [ "$mode"  = "xml" ];then 
+				case "$tag" in
+					"button") 	echo							"	        <button>"
+								if [ "$label" != "" ];then echo	"	        	<label>$label<label>"  ;fi
+								if [ "$icon"  != "" ];then echo	"	        	<input file stock=\"$icon\"></input>"  ;fi
+								echo							"	        	<action>$xparm</action>"  
+								echo							"	        </button>"  
+							;;
+					*)  		echo							"	        	<$tag>$xparm</$tag>"  
+				esac
+			else
+				$cmd "| $tag | $db | $tb | $pid | $field | $entry"  
+			fi
+		done
+	done
+}
 function rc_gui_get_xml () {
+	local db="$1" tb="$2" key="$3" 
+	sizetlabel=20;sizeentry=36;sizetext=46;ref_entry=""
+	IFS=",";name=($TNAME);unset IFS;IFS="|";meta=($TMETA);unset IFS	
+	pid=$$
+	stmt="select * from rules where rules_db = \"$db\" and rules_tb = \"$tb\" and rules_status < 9"
+	sql_execute $dbparm ".mode line\n$stmt" > "${rulesfile}${tb}_$(echo $db | tr '/' '_').txt"
+	setconfig_db "defaultrow|$db $tb $pid|$key"
+	echo '<vbox hscrollbar-policy="0" vscrollbar-policy="0" space-expand="true" scrollable="true">'
+	echo '	<vbox space-expand="false">'
+	echo '		<hbox>'
+	echo '			<entry width_chars="'$sizeentry'" space-fill="true">'
+	echo '				<variable>entryp</variable>'
+	echo '				<input>'$script' --func ctrl_rc_gui "entryp | '$db '|' $tb '|' ${PRIMKEY} '| $entryp |' ${meta[$ID]} '|' ${pid}'"</input>'
+	echo '			</entry>'
+	echo '			<text width-chars="46" justify="3"><label>'$PRIMKEY' (PK) (type,null,default,primkey)</label></text>'
+	echo '		</hbox>'
+	echo '	</vbox>'
+	echo '	<vbox>'
+    entrys="";del=""
+   	for ((ia=0;ia<${#name[@]};ia++)) ;do
+		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
+		if [ "${name[$ia]}" = "rowid" ];then continue ;fi
+		rc_gui_get_rule "$db" "$tb" "${name[$ia]}"
+		if [ "$?" = "$true" ];then func=$FUNC;visible="false" ;else func="";visible="true";fi
+		echo    '		<hbox>' 
+		entrys="${entrys}${del}"'$entry'"$ia";del="#"
+		if  [ "$func" = "" ] || [ "$func" = "fileselect" ] ; then  					
+			echo    ' 			<entry width_chars="'$sizeentry'" space-fill="true" auto-refresh="true">'  
+			echo    ' 				<variable>entry'$ia'</variable>' 
+			echo    ' 				<sensitive>'"$visible"'</sensitive>' 
+			echo    ' 				<input file>"'$(get_input_filename "$db" "$tb" "${name[$ia]}" "$pid")'"</input>' 
+			echo    ' 			</entry>' 
+		else
+            echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true">'
+			echo 	' 				<variable>entry'$ia'</variable>'
+			echo    ' 				<input file>"'$(get_input_filename "$db" "$tb" "${name[$ia]}" "$pid")'"</input>' 
+			rc_gui_rules "xml" "action" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "${meta[$ia]}" "$pid" "$ACTION"
+		  	echo  	'			</comboboxtext>'
+		fi
+		if  [ "$func" = "fileselect" ] ; then  
+			echo	'	        <button>'
+			echo	'				<input file stock="gtk-open"></input>'
+    		echo	' 				<action>'$script' --func ctrl_rc_gui "fileselect  | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | ' ${meta[$ID]} '|' ${pid}'"</action>'
+			rc_gui_rules "xml" "action" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "${meta[$ia]}" "$pid" "$ACTION"
+			echo	'			</button>'
+		fi
+		rc_gui_rules "xml" "button" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "${meta[$ia]}" "$pid" "$ACTION"
+		echo  	' 			<text width-chars="'$sizetext'" justify="3"><label>'${name[$ia]}' ('${meta[$ia]}')</label></text>'   
+		echo    '		</hbox>' 
+	done
+	echo '	</vbox>'
+	echo '	<hbox>'
+	for label in back next read insert update delete clear refresh;do
+		echo '		<button><label>'$label'</label>'
+		echo '			<action>'$script' --func ctrl_rc_gui "button_'$label' | '$db' | '$tb' | '$PRIMKEY' | $entryp | '${meta[$ID]}' | '${pid}' | '$entrys'"</action>'
+		echo '		</button>'
+	done
+	echo '	<button>'
+	echo '		<label>exit</label>'
+	echo '		<action>'$script' --func save_geometry "'"${wtitle}#${geometryfile}#${geometrylabel}"'"</action>'	
+	echo '		<action type="exit">CLOSE</action>'
+	echo '	</button>'
+	echo '	</hbox>'
+	echo '</vbox>'  
+}
+function rc_gui_get_xml_old () {
 	log debug "$FUNCNAME ID $ID $@"
 	db="$1";shift;tb="$1";shift;key="$1"
 	sizetlabel=20;sizeentry=36;sizetext=46;ref_entry=""
@@ -725,17 +718,19 @@ function rc_gui_get_xml () {
 			echo    ' 			<entry width_chars="'$sizeentry'" space-fill="true" auto-refresh="true">'  
 			echo    ' 				<variable>entry'$ia'</variable>' 
 			echo    ' 				<sensitive>'"$visible"'</sensitive>' 
-			echo    ' 				<input file>"'${tpath}/rc_field_${pid}_${name[$ia]}_$(echo "${db}_${tb}" | tr '/. ' '_')'"</input>' 
+#			echo    ' 				<input file>"'${tpath}/rc_field_${pid}_${name[$ia]}_$(echo "${db}_${tb}" | tr '/. ' '_')'"</input>' 
+			echo    ' 				<input file>"'$(get_input_filename "$db" "$tb" "${name[$ia]}" "$pid")'"</input>' 
 			echo    ' 			</entry>' 
 		else
             echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true">'
 			echo 	' 				<variable>entry'$ia'</variable>'
-			echo    ' 				<input file>"'${tpath}/rc_field_${pid}_${name[$ia]}_$(echo "${db}_${tb}" | tr '/. ' '_')'"</input>' 
+#			echo    ' 				<input file>"'${tpath}/rc_field_${pid}_${name[$ia]}_$(echo "${db}_${tb}" | tr '/. ' '_')'"</input>' 
+			echo    ' 				<input file>"'$(get_input_filename "$db" "$tb" "${name[$ia]}" "$pid")'"</input>' 
 			for arg in "${action[@]}" ;do
 				if [ "$func" = "liste" ];then break ;fi
 				button="${arg%%\@*}";cmd="${arg##*\@}"
 				if [ "$button" = "action" ]; then
-					echo '					<action>'$script' --func ctrl_rc_gui "command   | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | ' ${meta[$ID]} '|' ${pid}'|' ${cmd}'"</action>'
+					echo '					<action>'$script' --func ctrl_rc_gui "comand   | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | ' ${meta[$ID]} '|' ${pid}'|' ${cmd}'"</action>'
 				fi
 			done
 		  	echo  	'			</comboboxtext>'
@@ -747,7 +742,7 @@ function rc_gui_get_xml () {
 			for arg in "${action[@]}" ;do
 				button="${arg%%\@*}";cmd="${arg##*\@}"
 				if [ "$button" = "action" ]; then
-					echo '					<action>'$script' --func ctrl_rc_gui "command   | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | ' ${meta[$ID]} '|' ${pid}'|' ${cmd}'"</action>'
+					echo '					<action>'$script' --func ctrl_rc_gui "comand   | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | ' ${meta[$ID]} '|' ${pid}'|' ${cmd}'"</action>'
 				fi
 			done			
 			echo	'			</button>'
@@ -760,7 +755,7 @@ function rc_gui_get_xml () {
 				echo "			<button>"
 				echo	'			<input file stock="gtk-media-play"></input>'
 				echo "				<label>$button</label>"
-				echo '				<action>'$script' --func ctrl_rc_gui "command   | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | '${meta[$ID]}'|' ${pid}'|' ${cmd}'"</action>'
+				echo '				<action>'$script' --func ctrl_rc_gui "comand   | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | '${meta[$ID]}'|' ${pid}'|' ${cmd}'"</action>'
 				echo "			</button>"
 			fi
 		done	
@@ -785,7 +780,7 @@ function rc_gui_get_xml () {
 	echo '	</hbox>'
 	echo '</vbox>'  
 }
-function rc_gui_get_xml_old () {
+function rc_gui_get_xml_very_old () {
 	log debug "$FUNCNAME ID $ID $@"
 	db="$1";shift;tb="$1";shift;key="$1"
 	sizetlabel=20;sizeentry=36;sizetext=46;ref_entry=""
@@ -846,7 +841,7 @@ function rc_gui_get_xml_old () {
             echo	'    			<action type="refresh">entry'$ia'</action>'	
             echo	'			</button>' 	
 		fi
-		if 	[ "$func" = "reference" ] || [ "$func" = "liste" ] || [ "$func" = "table" ] || [ "$func" = "command" ];then 
+		if 	[ "$func" = "reference" ] || [ "$func" = "liste" ] || [ "$func" = "table" ] || [ "$func" = "comand" ];then 
 		    ref_entry="$ref_entry $ia""_""$ia"
 			echo    ' 			<entry width_chars="5"  space-fill="true"  visible="false">'  
 			echo    ' 				<variable>entry'$ia'</variable>' 
@@ -1208,19 +1203,22 @@ function rc_read_tb () {
 		sql_execute "$db" ".mode line\nselect * from $tb where $PRIMKEY = $rowid" > "$tmpf"
 	fi
 	while read -r field trash value;do
-		file="${tpath}/rc_field_${pid}_${field}_"$(echo "${db}_${tb}" | tr '/. ' '_')					
+		file=$(get_input_filename "$db" "$tb" "$field" "$pid") 				
+		echo "$value" > "$file"
 		rc_gui_get_rule "$db" "$tb" "$field";	
-		if [ "$?" = "$false" ] ;then echo "$value" > "$file";continue;fi
+		if 	 [ "$?" = "$false" ] ;then continue;fi
 		if 	 [ "$FUNC" = "reference" ]; then
 			SCMD1=$(echo "$SCMD1" | tr ';' ' ')
 			sql_execute "$SDB" "$SCMD1  = \"$value\"" 	>  "$file"		# aktuellen wert als erstes anzeigen
 			sql_execute "$SDB" "$SCMD1 != \"$value\"" 	>> "$file"		# dann die anderen
 		elif [ "$FUNC" = "fileselect" ]; then
+			continue
 			if [ "$value" != "" ];then setconfig_db "searchpath|rule_selectdb|$value";fi  
 			echo "$value" > "$file"
 			if [ "$SCMD1" = "" ];then continue  ;fi
-			cmd="${SCMD1/action@/}"
-            $cmd "|" "$db" "|" "$tb" "|" "$pid" "|" "$PRIMKEY" "|" "$rowid" "|" "$field" "|" "$value" "|" "$file" 
+			cmd="${SCMD1##*@}"
+			setmsg -i -d --width=600 "$FUNCNAME\nfileselect\n$cmd"
+            $cmd "input |" "$db" "|" "$tb" "|" "$pid" "|" "$field" "|" "$value" "|" "$file" 
 		elif [ "$FUNC" = "table" ]; then
 			sql_execute "$SDB" "$SCMD1  = \"$value\"" 	> "$file"		# nur aktuellen wert als erstes anzeigen
 		elif [ "$FUNC" = "liste" ]; then
@@ -1232,13 +1230,9 @@ function rc_read_tb () {
 			lng=${#field}
 			for arg in "${aliste[@]}" ;do if [ "$value"  = "${arg:0:$lng}" ];then echo $arg;break ;fi;done > "$file"
 			for arg in "${aliste[@]}" ;do if [ "$value" != "${arg:0:$lng}" ];then echo $arg		  ;fi;done >>  "$file"
-		elif [ "$FUNC" = "command" ]; then 
-			IFS=";";action=($ACTION);unset IFS
-			for arg in "${action[@]}" ;do
-				button="${arg%%\@*}";cmd="${arg##*\@}"
-				if [ "$button" != "$arg" ]; then continue;fi
-				$cmd "|" "$db" "|" "$tb" "|" "$pid" "|" "$PRIMKEY" "|" "$rowid" "|" "$field" "|" "$value" "|" "$file" > "$file"
-			done			
+		elif [ "$FUNC" = "comand" ]; then 
+			setmsg -i -d "$FUNCNAME\nexe\ninput\n$db\n$tb\n$pid\n$field\n$value"
+			rc_gui_rules "exe" "input" "$db" "$tb" "$field" "$value" "meta" "$pid" "$ACTION" > "$file"
 		else setmsg -i "$FUNCNAME type not known $FUNC"
 		fi 						
 	done  < "$tmpf" 
@@ -1351,8 +1345,8 @@ function rc_sql_execute_old () {
 		setconfig_db   "rc_field|$db $tb $(trim_value ${line%%\=*})|$(trim_value ${line#*\=})"
 	done < "$tmpf"
 }
-function setmsg () { func_setmsg $*; }
 function get_field_name () { echo $(readlink -f "$*") | tr -d '/.'; }
+function get_input_filename () { echo "${tpath}/inputfile_$4_$3"$(echo "$1_$2" | tr '/. ' '_')".txt"; }
 function get_fileselect () { 
 	type="searchpath";field="$1";shift;save="$*" 
 	if [ "$field" = "--save" ];then save=$field ;field=""  ;fi
@@ -1384,7 +1378,7 @@ function is_table () {
 	if [ "$tb" = "" ];then return 1;else return 0;fi
 }
 function setconfig_db () {
-    parm=$*
+    local parm=$* field="" arr="" value="" type="" id=""
     IFS="|";arr=($parm);type="${arr[0]}";field=$(echo "${arr[1]}" | tr ' ' '_');value=$(echo "${arr[2]}" | remove_quotes);unset IFS
 	value=${value//\"/\"\"}
 	if [ "$type" = "wherelist" ]; then
@@ -1456,7 +1450,6 @@ function tb_get_tables () {
 	sql_execute "$1" '.tables' | fmt -w 1 | grep -v -e '^$'  
 	if [ "$?" -gt "0" ];then return 1;fi
 }
-function sql_execute () { func_sql_execute $*; } 
 function terminal_cmd () {
 	termfile="$1" ;local db="$(getconfig_db parm_value defaultdatabase $2)" 
 	echo ".exit 2> /dev/null" 	>  "$termfile" 
@@ -1473,7 +1466,45 @@ function x_read_csv () {
 	if [ "$?" -gt "0" ];then return;fi
 	sql_execute $dbparm "select * from tmpcsv" > "$file"
 }
-function cmd_rules () {
+function comand_rules () {
+	pparm=$*;IFS="|";parm=($pparm);unset IFS  
+	local func=$(trim_value ${parm[0]})  mode=$(trim_value ${parm[1]})
+	db=$(trim_value ${parm[2]})      	 tb=$(trim_value ${parm[3]}) 
+	local pid=$(trim_value ${parm[4]})   field=$(trim_value ${parm[5]}) value=$(trim_value ${parm[6]})
+	if [ "$field" = "" ];then  return  ;fi ## noch ungeklaert
+	if [ "$func" = "rules" ]; then
+		if  [ "$mode" = "input" ];then 
+			if [ "${field:0:8}" = "rules_tb" ];then
+			    ruledb=$(head -n 1 $(get_input_filename "$db" "$tb" "${field/_tb/_db}" "$pid") ) 
+				if [ "$value" != "" ]; then echo "$value";else value=" ";fi
+				tb_get_tables "$ruledb" | grep -v "$value"
+			fi
+			if [ "${field}" = "rules_field" ];then
+			    ruledb=$(head -n 1 $(get_input_filename "$db" "$tb" "rules_db" "$pid") ) 
+			    ruletb=$(head -n 1 $(get_input_filename "$db" "$tb" "rules_tb" "$pid") ) 
+				if [ "$value" != "" ]; then echo "$value";else value=" ";fi
+				sql_execute "$ruledb" "pragma table_info($ruletb)"  | cut -d ',' -f2  | grep -v "$value"
+			fi
+		else
+			if [ "${field:0:8}" = "rules_db" ];then
+			    ruledb=$(head -n 1 $(get_input_filename "$db" "$tb" "${field}" "$pid") ) 
+				file=$(get_input_filename "$db" "$tb" "${field/_db/_tb}" "$pid") 
+				tb_get_tables "$ruledb"   > "$file"
+            fi
+			if [ "${field}" = "rules_db" ] || [ "${field}" = "rules_tb" ];then
+			    ruledb=$(head -n 1 $(get_input_filename "$db" "$tb" "rules_db" "$pid") ) 
+			    if [ "${field}" = "rules_tb" ];then
+					ruletb=$value
+				else
+					ruletb=$(head -n 1 $(get_input_filename "$db" "$tb" "rules_tb" "$pid") ) 
+				fi
+				file=$(get_input_filename "$db" "$tb" "rules_field" "$pid")
+				sql_execute "$ruledb" "pragma table_info($ruletb)"  | cut -d ',' -f2    > "$file"
+            fi
+		fi
+	fi
+}
+function cmd_rules_old () {
 	pparm=$*;IFS="|";parm=($pparm);unset IFS 
 	local func=$(trim_value ${parm[0]})  db=$(trim_value ${parm[1]})      tb=$(trim_value ${parm[2]}) 
 	local pid=$(trim_value ${parm[3]})   primkey=$(trim_value ${parm[4]}) rowid=$(trim_value ${parm[5]})
@@ -1482,10 +1513,12 @@ function cmd_rules () {
 	set -- $func;func="$1";myfield="$2"
 	setmsg -i -d --width=600 "$FUNCNAME \nfunc $func\nmyfield $myfield\ndb $db\ntb $tb\npid $pid\nprimkey $primkey\nrowid $rowid\nfield $field\nvalue $value"				
 	if    [ "$field" = "rules_tb" ]; then 
-		myfile="${tpath}/rc_field_${pid}_rules_db_"$(echo "${db}_${tb}" | tr '/. ' '_')
+#		myfile="${tpath}/rc_field_${pid}_rules_db_"$(echo "${db}_${tb}" | tr '/. ' '_')
+		myfile=$(get_input_filename "$db" "$tb" "rules_db" "$pid") 
 		ruledb=$(head -n 1 "$myfile")
 	elif  [ "$field" = "rules_tb_ref" ]; then 
-		myfile="${tpath}/rc_field_${pid}_rules_db_ref_"$(echo "${db}_${tb}" | tr '/. ' '_')
+#		myfile="${tpath}/rc_field_${pid}_rules_db_ref_"$(echo "${db}_${tb}" | tr '/. ' '_')
+		myfile=$(get_input_filename "$db" "$tb" "rules_db_ref" "$pid") 
 		ruledb=$(head -n 1 "$myfile")
 	else
 		ruledb=$(getconfig_db "parm_value" "searchpath" "rule_selectdb")	
@@ -1498,7 +1531,8 @@ function cmd_rules () {
 	fi
 	case "$func" in
 		 "gettables")   if [ "$rules_tb" != "" ]; then
-							myfile="${tpath}/rc_field_${pid}_${rules_tb}_"$(echo "${db}_${tb}" | tr '/. ' '_')
+#							myfile="${tpath}/rc_field_${pid}_${rules_tb}_"$(echo "${db}_${tb}" | tr '/. ' '_')
+							myfile=$(get_input_filename "$db" "$tb" "$rules_tb" "$pid") 
 							tb_get_tables "$ruledb" > "$myfile"
 							value=$(head -n 1 "$myfile")
 							setconfig_db "searchpath|rule_selecttb|$value"
@@ -1520,7 +1554,9 @@ function cmd_rules () {
 							ruletb=$(getconfig_db "parm_value" "searchpath" "rule_selecttb")
 						fi
 						if [ "$rules_field" != "" ]; then
-							myfile="${tpath}/rc_field_${pid}_rules_field_"$(echo "${db}_${tb}" | tr '/. ' '_')
+#							myfile="${tpath}/rc_field_${pid}_rules_field_"$(echo "${db}_${tb}" | tr '/. ' '_')
+							myfile=$(get_input_filename "$db" "$tb" "rules_field" "$pid") 
+
 							sql_execute "$ruledb" "pragma table_info($ruletb)"  | cut -d ',' -f2 > "$myfile"
 							return
 						fi

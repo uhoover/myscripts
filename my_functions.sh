@@ -96,6 +96,7 @@ function func_sql_execute () {
 	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
 	return 1
 }
+function sql_execute () { func_sql_execute $*; } 
 function sql_execute () { func_sql_execute $* ; }
 function trap_init () {
     script="$0";script=${script##*\\};
