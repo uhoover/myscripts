@@ -227,7 +227,7 @@ function func_log() {
     if [ "$verbose_on" -gt  0 ]; then 
         funcname="${FUNCNAME[2]}";if [ "$funcname" == "" ];then funcname="bash";fi
         funcname=$(left "${funcname}" 20 )
-		set -- $(date "+%Y-%m-%d %H:%M:%S")" ${funcname}" "$@"
+		set -- $(date "+%Y-%m-%d %H:%M:%S:%N")" ${funcname}" "$@"
 	fi 
     if [ "$log_on" -gt  0 ];     then
 		if [ "$logfile" == "" ];  then logfile="$SYSLOG"   ;fi
@@ -1111,7 +1111,6 @@ function func_init () {
 }
 function nop () { return; }
 save_geometry (){
-#	str=$*;window=${str%\#*};gfile=${str#*\#}
 	str=$*;IFS='#';local arr=( $str );unset IFS; window=${arr[0]};gfile=${arr[1]};glabel=${arr[2]}
 	XWININFO=$(xwininfo -stats -name "$window")
 	if [ "$?" -ne "0" ];then func_setmsg -i "error XWINFO";return  ;fi
@@ -1127,7 +1126,7 @@ save_geometry (){
 	echo "WIDTH=$WIDTH"    >> "$gfile"
 	echo "X=$X"            >> "$gfile"
 	echo "Y=$Y"            >> "$gfile"
-	setconfig_db "config" "$glabel" ${WIDTH}x${HEIGHT}+${X}+${Y}
+	setconfig_db "geometry|$glabel|${WIDTH}x${HEIGHT}+${X}+${Y}"
 	chmod 700 "$gfile"
 }
 trap_init
