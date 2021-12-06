@@ -13,16 +13,96 @@ function axit() {
 }
 function ftest () {
 	local db="$1" tb="$2" 
-	is_table "$db" "$tb"
-	local file="${dpath}/${tb}_$(date "+%Y_%m_%d_%H_%M")$(echo $db | tr '/.' '_').txt"
-	sql_execute "$db" ".dump $tb" |
+	if [ "$db" = "" ];then db="$dbrules"  ;fi
+	if [ "$tb" = "" ];then tb="$tbrules"  ;fi
+	readfile="$sqlpath/read_${tb}.txt"
+	readcrtb="$sqlpath/read_${tbcreate}.txt"
+	meta_info_file="$sqlpath/meta_${tb}.txt"
+	cat  "$sqlpath/create_table_${tbcreate}.sql" > "$readcrtb"
+	echo "insert into $tbcreate (pos,field,type,nullable,default_value,primary_key) values" >> $readcrtb
+###	table info
+	tb_meta_info "$db" "$tb";cp $tmpf $meta_info_file 
 	while read -r line;do
-		echo $line
-		if [ "${line:0:5}" = "BEGIN" ];then 
-			echo "DROP  TABLE IF EXISTS ${tb}_dump;"  
+	    IFS=",";fields=( $line );unset IFS;nline="";del=""
+	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
+			arr=$(echo ${fields[$ia]} | tr -d '"' | tr -d "'")
+			case "$ia" in
+				0)		arr="${arr}0"  ;;
+				3)		if [ "$arr"  = "1" ];then  arr="false" ;else  arr="true" ;fi;;
+				5)		if [ "$arr"  = "1" ];then  arr="true"  ;else  arr="false" ;fi;;
+				*)  	nop
+			esac
+			nline="$nline$del\"$arr\"";del=","
+		done
+		echo "${delim}(${nline})" >> $readcrtb 
+		delim=","
+	done < $meta_info_file
+	echo ";" >> $readcrtb
+###	index info
+	ixline=""
+	sql_execute "$db" "pragma index_list($tb)" |  tr '[:upper:]' '[:lower:]' |
+    while read iline; do
+		IFS=",";arr=($iline);ixline="${arr[1]},${arr[2]},${arr[3]},"
+		sql_execute "$db" "pragma index_info(${arr[1]})" |  tr '[:upper:]' '[:lower:]' | 
+	    while read line; do
+			IFS=",";arr=(${ixline}${line});unset IFS;del=","
+			stmt="set"  
+			if [ "${arr[0]:0:16}" != "sqlite_autoindex" ];then  stmt="set ixname=\"${arr[0]}\"";else stmt="set";del=" ";fi
+			if [ "${arr[2]}" = "u" ];then  stmt="${stmt}${del}isunique=\"true\"";del=",";fi
+			echo "update $tbcreate $stmt where field=\"${arr[5]}\";" >> $readcrtb
+		done 
+	done  	
+	echo "update $tbcreate set auto_increment = \"true\" where primary_key = 'true' and type like 'integer';" >> $readcrtb
+	echo "update $tbcreate set default_value = null where default_value = '';" >> $readcrtb
+###	foreign key info
+	sql_execute "$db" "pragma foreign_key_list($tb)" |  tr '[:upper:]' '[:lower:]' |
+    while read line; do
+		IFS=",";arr=($line) 
+		echo "update $tbcreate set ref_table = \"${arr[2]}\", ref_field = \"${arr[4]}\"," \
+			 "on_update = \"${arr[5]}\", on_delete = \"${arr[6]}\" where field = \"${arr[3]}\";" >> $readcrtb
+	done  
+    sql_execute "$dbparm" ".read $readcrtb"
+    if [ "$?" -gt "0" ];then return 1;fi
+### start dialog
+    "$script" "$dbcreate" $tbcreate "--notable" |
+    while read -r line; do
+		if [ "$line" = 'EXIT="abort"' ]; then
+			setmsg	-n "abort..."
+			return
 		fi
-	done > "$file"
-	return
+	done
+### create script	
+    echo "    create table if not exists $tb (" 
+	stmt="select field,type 
+			 ,case when primary_key = 'true' 	then 'primary key' 		else '' end
+			 ,case when auto_increment = 'true' then 'autoincrement' 	else '' end
+			 ,case when isunique = 'true' 		then 'unique' 			else '' end
+			 ,case when nullable = 'true' 		then '' 				else 'not null' end
+			 ,case when default_value != '' 	then 'default #' || default_value || '#'   else '' end
+			  from $tbcreate order by pos
+		"
+	sql_execute "$dbcreate" "$stmt" | tr '",' ' ' | tr '#' '"' |
+	while read -r line;do
+		if [ "$del" = "" ];then  del='    ';fi
+		echo "$del$line"
+		del="   ,"
+	done
+	sql_execute "$dbcreate" "select distinct foreign_table from modify where foreign_table != ''" |
+	while read -r line;do
+		str1=$(sql_execute "$dbcreate" "select field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
+		str2=$(sql_execute "$dbcreate" "select foreign_field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
+		echo "   ,foreign key(${str1}) on ${line}(${str2})"
+	done
+	echo "    );"
+	stmt="select 'create',case when isunique = 'true' then 'unique'	else '' end,'index if not exists',ixname from $tbcreate where ixname != ''"
+	sql_execute "$dbcreate" "$stmt" |
+	while read -r line;do 
+	    ix=${line##*\,}
+	    str=$(sql_execute "$dbcreate" "select field from $tbcreate where ixname = '$ix'" | fmt -w 500 | tr ' ' ',')
+	    echo "    $(echo $line | tr ',"' ' ') on ${tbcreate}(${str});"	    
+	done 
+	return 
+
 }
 function ctrl () {
 	log file tlog verbose  
@@ -44,10 +124,14 @@ function ctrl () {
 	script=$(readlink -f $0)  
 	x_configfile="$path/.configrc" 
 	dbparm="$path/parm.sqlite" 
-	dbrules="$path/rules.sqlite" 
+	dbrules="$path/parm.sqlite" 
+	dbcreate="$path/parm.sqlite" 
 	tbparm="parms"
 	tbrules="rules"
-	ctrl_master "$dbparm" "$tbparm" 
+	tbcreate="modify"
+	ctrl_create_master "$dbparm"   "$tbparm" 
+	ctrl_create_rules  "$dbrules"  "$tbrules" 
+	ctrl_create_modify "$dbcreate" "$tbcreate" 
 	limit=$(getconfig_db "parm_value" "config" "limit" 500)
 	maxcols=$(getconfig_db "parm_value" "config" "maxcols" 30)
 	term_heigth=$(getconfig_db "parm_value" "config" "term_heigth" 8)
@@ -85,7 +169,7 @@ function ctrl () {
 	log start
 	ctrl_tb $myparm	
 }
-function ctrl_rules() {
+function ctrl_create_rules() {
 	is_table "$1" "$2"; if [ $? -lt 1 ]; then return;fi 
 	local db="$1";local tb="$2"
 	cat << EOF > $sqlpath/create_table_${tb}.sql
@@ -119,7 +203,7 @@ insert into rules values
 EOF
     sql_execute "db" ".read" "$sqlpath/create_table_${tb}.sql"
 }
-function ctrl_master() {
+function ctrl_create_master() {
 	is_table "$1" "$2"; if [ $? -lt 1 ]; then return;fi 
 	local db="$1";local tb="$2";ix=-1
 	cat << EOF > $sqlpath/create_table_${tb}.sql
@@ -154,6 +238,33 @@ EOF
 EOF
 	chmod +x $ipath/${tb}.sh
 	rxvt -e $ipath/${tb}.sh
+}
+function ctrl_create_modify() {
+	is_table "$dbcreate" "$tbcreate"; if [ $? -lt 1 ]; then return;fi 
+##### create tmp table to store table-info
+	cat << EOF > "$sqlpath/create_table_${tbcreate}.sql"
+	drop table if exists $tbcreate; 
+ 	create table   $tbcreate (  
+	     crtb_id        integer primary key autoincrement not null unique, 
+	     pos            integer not null,  
+	     field          text    not null unique,  
+	     type           text    not null default 'text',  
+	     primary_key    text	default 'false',  
+	     auto_increment text	default 'false',  
+	     isunique		text	default 'false',  
+	     nullable       text	default 'false',  
+	     default_value  text,  
+	     ixname		    text,  
+	     foreign_table	text,  
+	     foreign_field  text,  
+	     on_delete  	text,  
+	     on_update  	text,  
+	     check_const  	text,
+	     field_old  	text	default 'null'
+	);  	
+EOF
+sql_execute "$dbcreate" ".read $sqlpath/create_table_${tbcreate}.sql"
+
 }
 function ctrl_file() {
 	if [ -f "$x_configfile" ];then return;fi 
@@ -251,7 +362,8 @@ function ctrl_tb_gui () {
 	case "$func" in
 		"input")   	# log $*
 					echo "$db" > "$dbfile"
-		            echo "$tb" > "$tbfile";tb_get_tables "$db" | grep -v "$tb" >> "$tbfile"
+#		            echo "$tb" > "$tbfile";tb_get_tables "$db" | grep -vw "$tb" >> "$tbfile"
+		            tb_get_tables "$db" "$tb" > "$tbfile"
 		            tb_get_where "$label" "$db" "$tb" > "$whfile"
 		            terminal_cmd "$terminal" "$label" "$db" 
 		            if [ "$value" = "defaultwhere" ];then wh="$(getconfig_db parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes)"  ;fi
@@ -757,9 +869,9 @@ function ctrl_manage_tb () {
 		if [ "$tb"   = "" ] || [ "$tb" = "new" ];then tb=$(zenity --text "new table-name" --entry);func="table" ;fi
 		if [ "$tb"   = "" ];then setmsg -n "abort..no tb selected"; return ;fi
 	fi
-	crtb="edit_$tb"
+	crtb="$tbcreate"
 	readfile="$sqlpath/read_${tb}.txt"
-	readcrtb="$sqlpath/tmp_${crtb}_read.txt"
+	readcrtb="$sqlpath/read_${tbcreate}_script.txt"
 	meta_info_file="$sqlpath/tmp_${crtb}_meta_info.txt"
 ###	
 	if 	 [ "$drop" = "$true" ]; then
@@ -770,24 +882,21 @@ function ctrl_manage_tb () {
 		is_database $db
 		if [ $? -eq 0 ];then found=$(echo ".tables $tb" | sqlite3 $db);else found=$false;fi
 		if [ "$found" = "" ]; then
-			func_sql_execute "$db" "create table $tb (${tb}_id  integer primary key autoincrement not null unique,${tb}_name	text);"
+			sql_execute "$db" "create table $tb (${tb}_id  integer primary key autoincrement not null unique,${tb}_name	text);"
 			edit=$true
-			echo "	drop table if exists $tb;" 					>  $readfile
-		else
-			echo "	drop table if exists ${tb}_copy;" 			>  $readfile
-			echo "	alter table $tb rename to ${tb}_copy;"		>> $readfile
-			echo "	drop table if exists $tb;" 					>> $readfile
 		fi
-		func_tb_meta_info "$db" $tb;TINSERT=$TSELECT; cp $tmpf $meta_info_file 
+		tb_meta_info "$db" $tb;TINSERT=$TSELECT; cp $tmpf $meta_info_file 
 		if [ "$edit" = "$true" ]; then	
-			manage_tb_modify "$db" "$tb" 						>> $readfile
+			manage_tb_modify "$db" "$tb" 							>  $readfile
+			if [ "$?" -gt 0 ];then setmsg -n "abbort..";return ;fi
 		else
-			sql_execute $db  ".schema $tb"  					>> $readfile 
+			echo "	drop table if exists $tb;" 						>  $readfile
+			sql_execute $db  ".schema $tb"  						>> $readfile 
 		fi
 		if [ "$found" != "" ]; then
-			echo "	insert into $tb  ($TSELECT) " 				>> $readfile
-			echo "	select            $TSELECT " 				>> $readfile
-			echo "	from ${tb}_copy;" 							>> $readfile
+			echo "	insert into $tb  ($TSELECT) " 					>> $readfile
+			echo "	select            $TSELECT " 					>> $readfile
+			echo "	from ${tb}_copy;" 								>> $readfile
 		fi
 	elif [ "$import" = "$true" ]; then
 		if [ ! -f "$ifile" ]; then
@@ -916,11 +1025,11 @@ function manage_tb_import () {
 		echo "	where b.${PRIMKEY} is null);"	>>  "$readfile"
 	fi
 }
-function manage_tb_modify () {
+function manage_tb_modify_old () {
 	db="$1";tb="$2" 
 ##### create tmp table to store table-info
-	echo "drop table if exists $crtb;" > $readcrtb  
-	echo "create table   $crtb ( " \
+	echo "drop table if exists $tbcreate;" > $readcrtb  
+	echo "create table   $tbcreate ( " \
 	     "crtb_id        integer primary key autoincrement not null unique," \
 	     "pos            integer not null," \
 	     "field          text	 not null unique," \
@@ -1046,6 +1155,127 @@ function manage_tb_modify () {
 	sql_execute $db "select sql from sqlite_master where type = \"trigger\" and tbl_name = \"$tb\";" |  tr -d '"' | tr '[:upper:]' '[:lower:]'  
 	echo "--"
 }
+function manage_tb_modify () {
+	local db="$1" tb="$2" 
+    manage_tb_modify_create "$db" "$tb" > "$readcrtb" ###	create table for dialog	
+    sql_execute "$dbparm" ".read $readcrtb"
+    if [ "$?" -gt "0" ];then return 1;fi
+### start dialog
+    "$script" "$dbcreate" $tbcreate "--notable" | grep -i "abort" |
+    while read -r line; do return 1; done
+	manage_tb_modify_script "$db" $tb 				  ###   create script	
+}
+function manage_tb_modify_create () {
+	local db="$1" tb="$2"
+	meta_info_file="$sqlpath/meta_${tb}.txt"
+	cat  "$sqlpath/create_table_${tbcreate}.sql" 
+	echo "insert into $tbcreate (pos,field,type,nullable,default_value,primary_key) values"  
+	tb_meta_info "$db" "$tb";cp $tmpf $meta_info_file 
+	while read -r line;do
+	    IFS=",";fields=( $line );unset IFS;nline="";del=""
+	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
+			arr=$(echo ${fields[$ia]} | tr -d '"' | tr -d "'")
+			case "$ia" in
+				0)		arr="${arr}0"  ;;
+				3)		if [ "$arr"  = "1" ];then  arr="false" ;else  arr="true" ;fi;;
+				5)		if [ "$arr"  = "1" ];then  arr="true"  ;else  arr="false" ;fi;;
+				*)  	nop
+			esac
+			nline="$nline$del\"$arr\"";del=","
+		done
+		echo "${delim}(${nline})"  
+		delim=","
+	done < $meta_info_file
+	echo ";" 
+###	index info
+	ixline=""
+	sql_execute "$db" "pragma index_list($tb)" |  tr '[:upper:]' '[:lower:]' |
+    while read iline; do
+		IFS=",";arr=($iline);ixline="${arr[1]},${arr[2]},${arr[3]},"
+		sql_execute "$db" "pragma index_info(${arr[1]})" |  tr '[:upper:]' '[:lower:]' | 
+	    while read line; do
+			IFS=",";arr=(${ixline}${line});unset IFS #;del=","
+			stmt="set"  
+			if [ "${arr[0]:0:16}" = "sqlite_autoindex" ];then  
+				stmt="set isunique = \"true\"" 
+			else 
+				stmt="set ixname=\"${arr[0]}\""
+			fi
+			echo "update $tbcreate $stmt where field='${arr[5]}';" 
+		done 
+	done  	
+	echo "update $tbcreate set auto_increment = \"true\" where primary_key = 'true' and type like 'integer';"  
+	echo "update $tbcreate set default_value = null where default_value = '';" 
+	echo "update $tbcreate set field_old = field;" 
+###	foreign key info
+	sql_execute "$db" "pragma foreign_key_list($tb)" |  tr '[:upper:]' '[:lower:]' |
+    while read line; do
+		IFS=",";arr=($line) 
+		echo "update $tbcreate set ref_table = \"${arr[2]}\", ref_field = \"${arr[4]}\"," \
+			 "on_update = \"${arr[5]}\", on_delete = \"${arr[6]}\" where field = \"${arr[3]}\";"  
+	done  
+}
+function manage_tb_modify_script () {
+	local db="$1" tb="$2" del=""
+	echo "	  drop table if exists ${tb}_copy;" 				
+	echo "	  create table ${tb}_copy as select * from $tb;" 	
+	echo "	  drop table if exists $tb;" 						
+	echo "    create table if not exists $tb (" 
+	stmt="select field,type 
+			 ,case when isunique = 'true' 		then 'unique' 			else '' end
+			 ,case when nullable = 'true' 		then '' 				else 'not null' end
+			 ,case when default_value != '' 	then 'default #' || default_value || '#'   else '' end
+			 ,case when primary_key = 'true' 	then 'primary key' 		else '' end
+			 ,case when auto_increment = 'true' then 'autoincrement' 	else '' end
+			  from $tbcreate order by pos
+		"
+	sql_execute "$dbcreate" "$stmt" | tr '",' ' ' | tr '#' '"' |
+	while read -r f t line;do
+		printf "%8s %-20s %-10s %s \n" "$del" "$f" "$t" "$line" 
+		del=","
+	done
+	sql_execute "$dbcreate" "select distinct foreign_table from $tbcreate where foreign_table != ''" |
+	while read -r line;do
+		str1=$(sql_execute "$dbcreate" "select field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
+		str2=$(sql_execute "$dbcreate" "select foreign_field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
+		echo "   ,foreign key(${str1}) on ${line}(${str2})"
+	done
+	echo "    );"
+	stmt="select 'create',case when isunique = 'true' then 'unique'	else '' end,'index if not exists',ixname from $tbcreate where ixname != ''"
+	sql_execute "$dbcreate" "$stmt" |
+	while read -r line;do 
+	    ix=${line##*\,}
+	    str=$(sql_execute "$dbcreate" "select field from $tbcreate where ixname = '$ix'" | fmt -w 500 | tr ' ' ',')
+	    echo "    $(echo $line | tr ',"' ' ') on ${tbcreate}(${str});"	    
+	done 
+### trigger info
+	sql_execute $db "select sql from sqlite_master where type = \"trigger\" and tbl_name = \"$tb\";" |  tr -d '"' | tr '[:upper:]' '[:lower:]'  
+	echo "--"
+	TINSERT=$(sql_execute "$dbcreate" "select field     from $tbcreate where field != '$PRIMARYKEY' order by pos" | fmt -w 500 | tr ' ' ',')
+	TSELECT=$(sql_execute "$dbcreate" "select field_old from $tbcreate where field != '$PRIMARYKEY' order by pos" | fmt -w 500 | tr ' ' ',' | tr -d '"')
+}
+function parm_from_rule () {
+	local db="$1" tb="$2" parm=${@:3} nparm="" vparm="" del="" del2="" value="" avlue="" iv=0
+	IFS=",";name=($TNAME);unset IFS
+	IFS="#";value=($parm);unset IFS
+  	for ((ia=0;ia<${#name[@]};ia++)) ;do
+		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
+		arg=$(echo ${value[$iv]} | tr  ',' ' ' | tr -d '"')
+		iv=$((iv+1))
+		if [ "$arg" = "" ];    			then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$arg" = "null" ];			then nparm=$nparm$del$arg;del="#";continue;fi
+		rc_gui_get_rule "$db" "$tb" "${name[$ia]}"
+		if [ "$?" = "$false" ];			then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$SCMD2" = "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$SCMD2" = "" ]; 			then SCMD2=0;fi
+		IFS=",";range=($SCMD2);unset IFS
+		IFS=" ";avalue=($arg);unset IFS
+		vparm="";del2=""
+		for arg in ${range[@]}; do vparm=$vparm$del2${avalue[$arg]};del2=" ";done
+		nparm=$nparm$del$vparm;del="#"
+	done
+	echo $nparm
+}
 function rc_read_tb () {
 	local debug func="$1" db="$2" tb="$3" pid="$4" PRIMKEY="$5" rowid="$6" file=""
 	log debug "$FUNCNAME $db $tb $pid $PRIMKEY $rowid "
@@ -1089,28 +1319,6 @@ function rc_read_tb () {
 	setmsg -n "no row with $PRIMKEY $rowid"
 	file=$(get_input_filename "$db" "$tb" "$PRIMKEY" "$pid") 				
 	echo $(getconfig_db parm_value defaultrowid "${db}_${tb}_${pid}") > "$file"
-}
-function parm_from_rule () {
-	local db="$1" tb="$2" parm=${@:3} nparm="" vparm="" del="" del2="" value="" avlue="" iv=0
-	IFS=",";name=($TNAME);unset IFS
-	IFS="#";value=($parm);unset IFS
-  	for ((ia=0;ia<${#name[@]};ia++)) ;do
-		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
-		arg=$(echo ${value[$iv]} | tr  ',' ' ' | tr -d '"')
-		iv=$((iv+1))
-		if [ "$arg" = "" ];    			then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$arg" = "null" ];			then nparm=$nparm$del$arg;del="#";continue;fi
-		rc_gui_get_rule "$db" "$tb" "${name[$ia]}"
-		if [ "$?" = "$false" ];			then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$SCMD2" = "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$SCMD2" = "" ]; 			then SCMD2=0;fi
-		IFS=",";range=($SCMD2);unset IFS
-		IFS=" ";avalue=($arg);unset IFS
-		vparm="";del2=""
-		for arg in ${range[@]}; do vparm=$vparm$del2${avalue[$arg]};del2=" ";done
-		nparm=$nparm$del$vparm;del="#"
-	done
-	echo $nparm
 }
 function rc_sql_execute () {
 	log debug $FUNCNAME $@
@@ -1260,6 +1468,20 @@ function getconfig_db () {
 }
 function trim_value   () { echo $* ; }
 function tb_get_tables () {
+	if [ "$#" -eq 0 ]; then return 1;fi
+	local db="$1"
+ 	if [ "$db" = "" ];then  return ;fi
+	if [ -d "$db" ];then setmsg "$db is folder\nselect sqlite database" ;return ;fi
+	if [ "$#" -eq 1 ]; then
+		sql_execute "$1" '.tables' | fmt -w 1 | grep -v -e '^$'  
+	else
+		local tb="$2"
+		if [ "$tb" = "" ];then tb=" " ;else echo $tb  ;fi
+		sql_execute "$1" '.tables' | fmt -w 1 | grep -v -e '^$' | grep -vw "$tb" 
+	fi
+	if [ "$?" -gt "0" ];then return 1;fi
+}
+function tb_get_tables_old () {
 	log debug $FUNCNAME $* 
  	if [ "$1" = "" ];then  return ;fi
 	if [ -d "$1" ];then setmsg "$1 is folder\nselect sqlite database" ;return ;fi
@@ -1301,26 +1523,26 @@ function comand_rules () {
 		esac
 		case "$mode"  in
 			 "input") 	case "$field" in
-							"rules_field")				command_rules_list_fields "${arr[3]}" "${arr[4]}" "${arr[5]}";;
-							"rules_tb")					command_rules_list_tb	  "${arr[3]}" "${arr[4]}";; 
-							"rules_tb_ref")				command_rules_list_tb	  "${arr[6]}" "${arr[7]}";; 
+							"rules_field")			command_rules_list_fields "${arr[3]}" "${arr[4]}" "${arr[5]}";;
+							"rules_tb")				tb_get_tables	  "${arr[3]}" "${arr[4]}";; 
+							"rules_tb_ref")			tb_get_tables	  "${arr[6]}" "${arr[7]}";; 
 							*) nop
 						esac;;
 			 "action") 	case "$field" in
-							 "rules_tb")		command_rules_list_fields "${arr[3]}" "${arr[4]}" "" 		 	 > "$fdfile";;
-							 "rules_db_ref")	command_rules_list_tb     "$(head -n 1 $dbfile)" "" 			 > "$tbfile";;
-							 "rules_db")		command_rules_list_tb     "$(head -n 1 $dbfile)" "" 			 > "$tbfile";; 
+							 "rules_tb")			command_rules_list_fields "${arr[3]}" "${arr[4]}" "" 	 > "$fdfile";;
+							 "rules_db_ref")		tb_get_tables     "$(head -n 1 $dbfile)" "" 			 > "$tbfile";;
+							 "rules_db")			tb_get_tables     "$(head -n 1 $dbfile)" "" 			 > "$tbfile";; 
 							 *) nop
 						esac;;
 			 *) nop
 		esac
 	fi
 }
-function command_rules_list_tb () {
-	local db="$1" tb="$2"
-	if [ "$tb" != "" ]; then echo "$tb";else tb=" ";fi
-	tb_get_tables "$db" | grep -v "$tb"
-}
+#~ function command_rules_list_tb () {
+	#~ local db="$1" tb="$2"
+	#~ if [ "$tb" != "" ]; then echo "$tb";else tb=" ";fi
+	#~ tb_get_tables "$db" | grep -v "$tb"
+#~ }
 function command_rules_list_fields () {
 	local db="$1" tb="$2" field="$3"
 	setmsg -i -d "$FUNCNAME\ndb $db\ntb $tb\nfield $field"
