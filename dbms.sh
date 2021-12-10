@@ -206,7 +206,7 @@ function ctrl_rollback () {
 	done
 }
 function ctrl_tb () {
-	log $*
+	log debug $*
 	dbliste=$(tb_get_labels $*)												# datenbanken und tabellen ermitteln
 	IFS="|";arr=($dbliste);unset IFS
 	if [ "${#arr[@]}" -lt "1" ];then setmsg -i "keine gueltigen Parameter";return 1 ;fi
