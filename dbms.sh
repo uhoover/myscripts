@@ -202,14 +202,8 @@ function ctrl_rollback () {
 	while read -r file;do
 		line=$(head -n 1 "$file")
 		set -- $line;tb=$2;db=${@:3}
-#		str=${file##*dump_};tb=${str%%@*}
-#		str=${file##*$tb};db=$(echo ${str%.sql*} | tr '!#' '/.')
-#        setmsg -q --width=300 "data has changed\nrestore $tb in\n$db ?" 
-#        if [ "$?" -gt 0 ];then continue  ;fi
         ctrl_manage_tb "$db" "$tb" "restore" "$file"
-#		echo $file
 	done
-#	setmsg -i "letzter"
 }
 function ctrl_tb () {
 	log $*
