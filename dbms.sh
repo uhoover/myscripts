@@ -8,112 +8,26 @@
  trap axit EXIT
  set -o noglob
 function axit() {
-	retcode=0 
+	local retcode=0  
   	if [ "$cmd" = "" ]; then log stop;fi
 }
 function ftest () {
-	local db="$1" tb="$2" 
-	if [ "$db" = "" ];then db="$dbrules"  ;fi
-	if [ "$tb" = "" ];then tb="$tbrules"  ;fi
-	readfile="$sqlpath/read_${tb}.txt"
-	readcrtb="$sqlpath/read_${tbcreate}.txt"
-	meta_info_file="$sqlpath/meta_${tb}.txt"
-	cat  "$sqlpath/create_table_${tbcreate}.sql" > "$readcrtb"
-	echo "insert into $tbcreate (pos,field,type,nullable,default_value,primary_key) values" >> $readcrtb
-###	table info
-	tb_meta_info "$db" "$tb";cp $tmpf $meta_info_file 
-	while read -r line;do
-	    IFS=",";fields=( $line );unset IFS;nline="";del=""
-	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
-			arr=$(echo ${fields[$ia]} | tr -d '"' | tr -d "'")
-			case "$ia" in
-				0)		arr="${arr}0"  ;;
-				3)		if [ "$arr"  = "1" ];then  arr="false" ;else  arr="true" ;fi;;
-				5)		if [ "$arr"  = "1" ];then  arr="true"  ;else  arr="false" ;fi;;
-				*)  	nop
-			esac
-			nline="$nline$del\"$arr\"";del=","
-		done
-		echo "${delim}(${nline})" >> $readcrtb 
-		delim=","
-	done < $meta_info_file
-	echo ";" >> $readcrtb
-###	index info
-	ixline=""
-	sql_execute "$db" "pragma index_list($tb)" |  tr '[:upper:]' '[:lower:]' |
-    while read iline; do
-		IFS=",";arr=($iline);ixline="${arr[1]},${arr[2]},${arr[3]},"
-		sql_execute "$db" "pragma index_info(${arr[1]})" |  tr '[:upper:]' '[:lower:]' | 
-	    while read line; do
-			IFS=",";arr=(${ixline}${line});unset IFS;del=","
-			stmt="set"  
-			if [ "${arr[0]:0:16}" != "sqlite_autoindex" ];then  stmt="set ixname=\"${arr[0]}\"";else stmt="set";del=" ";fi
-			if [ "${arr[2]}" = "u" ];then  stmt="${stmt}${del}isunique=\"true\"";del=",";fi
-			echo "update $tbcreate $stmt where field=\"${arr[5]}\";" >> $readcrtb
-		done 
-	done  	
-	echo "update $tbcreate set auto_increment = \"true\" where primary_key = 'true' and type like 'integer';" >> $readcrtb
-	echo "update $tbcreate set default_value = null where default_value = '';" >> $readcrtb
-###	foreign key info
-	sql_execute "$db" "pragma foreign_key_list($tb)" |  tr '[:upper:]' '[:lower:]' |
-    while read line; do
-		IFS=",";arr=($line) 
-		echo "update $tbcreate set ref_table = \"${arr[2]}\", ref_field = \"${arr[4]}\"," \
-			 "on_update = \"${arr[5]}\", on_delete = \"${arr[6]}\" where field = \"${arr[3]}\";" >> $readcrtb
-	done  
-    sql_execute "$dbparm" ".read $readcrtb"
-    if [ "$?" -gt "0" ];then return 1;fi
-### start dialog
-    "$script" "$dbcreate" $tbcreate "--notable" |
-    while read -r line; do
-		if [ "$line" = 'EXIT="abort"' ]; then
-			setmsg	-n "abort..."
-			return
-		fi
-	done
-### create script	
-    echo "    create table if not exists $tb (" 
-	stmt="select field,type 
-			 ,case when primary_key = 'true' 	then 'primary key' 		else '' end
-			 ,case when auto_increment = 'true' then 'autoincrement' 	else '' end
-			 ,case when isunique = 'true' 		then 'unique' 			else '' end
-			 ,case when nullable = 'true' 		then '' 				else 'not null' end
-			 ,case when default_value != '' 	then 'default #' || default_value || '#'   else '' end
-			  from $tbcreate order by pos
-		"
-	sql_execute "$dbcreate" "$stmt" | tr '",' ' ' | tr '#' '"' |
-	while read -r line;do
-		if [ "$del" = "" ];then  del='    ';fi
-		echo "$del$line"
-		del="   ,"
-	done
-	sql_execute "$dbcreate" "select distinct foreign_table from modify where foreign_table != ''" |
-	while read -r line;do
-		str1=$(sql_execute "$dbcreate" "select field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
-		str2=$(sql_execute "$dbcreate" "select foreign_field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
-		echo "   ,foreign key(${str1}) on ${line}(${str2})"
-	done
-	echo "    );"
-	stmt="select 'create',case when isunique = 'true' then 'unique'	else '' end,'index if not exists',ixname from $tbcreate where ixname != ''"
-	sql_execute "$dbcreate" "$stmt" |
-	while read -r line;do 
-	    ix=${line##*\,}
-	    str=$(sql_execute "$dbcreate" "select field from $tbcreate where ixname = '$ix'" | fmt -w 500 | tr ' ' ',')
-	    echo "    $(echo $line | tr ',"' ' ') on ${tbcreate}(${str});"	    
-	done 
-	return 
-
+	local db="$2" tb="$3" mode="$1"
+	case "$mode" in "eq"|"lt"|"gt")	return;; esac
+	file=$(get_filename "${tpath}/dump" "$tb" "$db" ".sql" | tr -s '_') 
+	if [ -f "$file" ];then return ;fi
+	ctrl_manage_tb "$db" "$tb" "dump" "$file"
 }
 function ctrl () {
 	log file tlog verbose  
 	rxvt="urxvt -depth 32 -bg [65]#000000 -geometry 40x20"
 	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
-	tpath="/tmp/${folder%%\.*}";xpath="$path/xml" 
+	tpath="/tmp/.${folder%%\.*}";xpath="$path/xml" 
 	dbpath="$HOME/db";sqlpath="$dbpath/sql";ipath="$dbpath/import" 
 	epath="/var/tmp/export_${folder%%\.*}" 
 	dpath="/var/tmp/dump_${folder%%\.*}" 
 	[ ! -d "$path" ]     && mkdir 	 "$path"  
-	[ ! -d "$tpath" ]    && mkdir 	 "$tpath"	&& ln -sf "$tpath"	  "$path/temp"  
+	[ ! -d "$tpath" ]    && mkdir 	 "$tpath"	&& ln -sf "$tpath"	  "$path/tmpdbms" 
 	[ ! -d "$path/tmp" ] && mkdir 	 "$path/tmp"  
 	[ ! -d "$xpath" ]	 && mkdir 	 "$xpath"  
 	[ ! -d "$epath" ]    && mkdir 	 "$epath"   && ln -sf "$epath"    "$path"   
@@ -279,6 +193,24 @@ function ctrl_file() {
 	echo "# geometry_tb=\"800x600+100+100\" 			#	set tb height,width,x,y " 	>> "$x_configfile" 	  
 	echo "# geometry_rc=\"600x400+100+150\" 			#	set rc height,width,x,y " 	>> "$x_configfile" 	  
 }
+function ctrl_rollback () {
+	ps -ax | grep -v grep | grep "gtkdialog -f" | grep "$tpath" > "$tmpf"
+	while read -r line;do
+		return
+	done < "$tmpf"
+	find "${tpath}" -name "dump*" |
+	while read -r file;do
+		line=$(head -n 1 "$file")
+		set -- $line;tb=$2;db=${@:3}
+#		str=${file##*dump_};tb=${str%%@*}
+#		str=${file##*$tb};db=$(echo ${str%.sql*} | tr '!#' '/.')
+#        setmsg -q --width=300 "data has changed\nrestore $tb in\n$db ?" 
+#        if [ "$?" -gt 0 ];then continue  ;fi
+        ctrl_manage_tb "$db" "$tb" "restore" "$file"
+#		echo $file
+	done
+#	setmsg -i "letzter"
+}
 function ctrl_tb () {
 	log $*
 	dbliste=$(tb_get_labels $*)												# datenbanken und tabellen ermitteln
@@ -305,10 +237,8 @@ function ctrl_tb () {
 	fi
     if [ "$geometry_tb" = "" ];then geometry_tb=$(getconfig_db "parm_value" "geometry" "$geometrylabel" '800x800+100+100');fi
 ##
-	[ -f "$tmpf" ] && rm "$tmpf"
-	log $*
     gtkdialog -f "$xmlfile" --geometry="$geometry_tb" > $tmpf				# start dialog
-##    
+##   
     while read -r line;do
 		echo $line															# save defaults
 		field="${line%%\=*}";value=$(echo "${line##*\=}" | tr -d '"')
@@ -325,6 +255,7 @@ function ctrl_tb () {
 			setconfig_db   "defaultrow|${labela[$ia]}_${entrya[$ia]} ${cboxtba[$ia]}|${treea[$ia]}" 
 		fi   
 	done
+	ctrl_rollback 
 }
 function ctrl_tb_gui () {
 	pparm=$*;IFS="|";parm=($pparm);unset IFS 
@@ -654,7 +585,7 @@ function ctrl_rc () {
 		echo "</window>" >> "$row_change_xml"
 	fi	
     if [ "$geometry_rc" = "" ];then geometry_rc=$(getconfig_db "parm_value" "geometry" "$geometrylabel" '800x500+100+200');fi
- 	gtkdialog -f "$row_change_xml" --geometry=$geometry_rc & # 2> /dev/null  
+ 	(erg=$(gtkdialog -f "$row_change_xml" --geometry=$geometry_rc );ctrl_rollback) & 
  	pid2=$!;setconfig_db "row_gui|$pid|$pid2"
 }
 function ctrl_rc_gui () {
@@ -664,7 +595,8 @@ function ctrl_rc_gui () {
 	local field=$(trim_value ${parm[3]}) key=$(trim_value ${parm[4]})  	 entrys=$(trim_value ${parm[5]})
 	local pid=$(trim_value ${parm[6]})   geometry=$(trim_value ${parm[7]})
 	local msg="" mode="normal"
-	tb_meta_info $db $tb
+#	setmsg -i --width=600 "entrys $entrys"
+	tb_meta_info $db $tb "$entrys"
 	if [ "$field" = "unknown" ];then field="$PRIMKEY";fi
 	file=$(get_input_filename "$db" "$tb" "$field" "$pid") 
 	setmsg -i -d --width=600 "$FUNCNAME\nfunc $func\ndb $db\ntb $tb\nfield $field\nkey $key\nentrys $entrys\npid $pid\nvalues $entrys"				
@@ -682,7 +614,7 @@ function ctrl_rc_gui () {
 		 "button_insert")   rc_sql_execute "$db" "$tb" "insert" "$field" "$key" "$pid" "$entrys"
 							if [ $? -gt 0 ];then return;fi 
 							;;
-		 "button_update")   rc_sql_execute "$db" "$tb" "update" "$field" "$key" "$pid" "$values" ;;
+		 "button_update")   rc_sql_execute "$db" "$tb" "update" "$field" "$key" "$pid" "$entrys" ;;
 		 "button_delete")   setmsg -q "$field=$key wirklich loeschen ?"
 							if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
 							rc_sql_execute "$db" "$tb" "delete" "$field" "$key" "$pid" 
@@ -890,6 +822,8 @@ function ctrl_manage_tb () {
 			manage_tb_modify "$db" "$tb" 							>  $readfile
 			if [ "$?" -gt 0 ];then setmsg -n "abbort..";return ;fi
 		else
+			echo "	drop table if exists ${tb}_copy;" 				
+			echo "	create table ${tb}_copy as select * from $tb;" 
 			echo "	drop table if exists $tb;" 						>  $readfile
 			sql_execute $db  ".schema $tb"  						>> $readfile 
 		fi
@@ -908,7 +842,12 @@ function ctrl_manage_tb () {
 			errmsg="cancel...no file selected"
 		fi
 	elif [ "$dump" = "$true" ]; then
-		file="${dpath}/${tb}#$(date "+%Y_%m_%d_%H_%M")$(echo $db | tr '/.' '_').txt"
+		if [ "$ifile" != "" ] ;then
+			file="$ifile"
+		else
+			file="${dpath}/dump_${tb}_$(date "+%Y_%m_%d_%H_%M")$(echo $db | tr '/.' '_').txt"
+		fi
+		echo "-- $tb $db"  
 		sql_execute "$db" ".dump $tb" |
 		while read -r line;do
 			echo $line
@@ -916,28 +855,31 @@ function ctrl_manage_tb () {
 				echo "DROP  TABLE IF EXISTS $tb;"  
 			fi
 		done > "$file"
+		if [ "$ifile" != "" ] ;then return;fi
 		setconfig_db "searchpath|dump_tb|$file"
-		rc_sql_execute_sync "resore" "$db" "$tb"
+		rc_sql_execute_sync "restore" "$db" "$tb"
 		errmsg="$func : dump $tb to $file"
 	elif [ "$restore" = "$true" ]; then
-		file=$(get_fileselect dump_tb)
-		if [ "$?" -gt 0 ];then 
-			errmsg="abort restore"
-		else
-		    str="${file%%\#*}"
-		    tb="${str##*\/}"
-		    is_table "$db" "$tb"
-		    if [ "$?" -eq 0 ];then 
-				sql_execute "$db" "drop table if exists ${tb}_dump;" 
-				sql_execute "$db" "create table ${tb}_dump as select * from $tb;"
-#				sql_execute "$db" "alter table $tb rename to ${tb}_dump;"
-#				setmsg -i "droped table"
-				sql_execute "$db" ".read $file"
-				if [ "$?" -eq 0 ];then sql_execute "$db" "drop table if exists ${tb}_dump";fi
-				rc_sql_execute_sync "restore" "$db" "$tb"
-		    fi
+		if [ "$ifile" = "" ] ;then
+			ifile=$(get_fileselect dump_tb)
+			if [ "$?" -gt 0 ];then setmsg -i "abort restore";return;fi
+			str=${ifile##*dump_};tb=${str%%_*};
 		fi
-		errmsg="$func : created $tb from $file"
+	    is_table "$db" "$tb"
+	    if [ "$?" -gt 0 ];then setmsg -i --width=600 "abort: table $tb not found in\n$db";return;fi
+	    setmsg -q --width=300 "data has changed\nrestore $tb in\n$db ?" 
+#		sql_execute "$db" "drop table if exists ${tb}_dump;" 
+#		sql_execute "$db" "create table ${tb}_dump as select * from $tb;"
+		echo "drop table if exists ${tb}_dump;" > "$tmpf" 
+		echo "create table ${tb}_dump as select * from $tb;" >> "$tmpf"
+		cat "$ifile" >> "$tmpf"
+#		xed "$tmpf";return
+		sql_execute "$db" ".read $tmpf"
+		if [ "$?" -gt 0 ];then return;fi
+		sql_execute "$db" "drop table if exists ${tb}_dump;" 
+		if [ "$?" -gt 0 ];then return;fi
+		errmsg="$func : created $tb from $ifile"
+		rc_sql_execute_sync "restore" "$db" "$tb"
 	fi	
 	if [ "$errmsg" != "" ];then setmsg -i "$errmsg";return  ;fi
 	xdg-open $readfile
@@ -1166,17 +1108,18 @@ function manage_tb_modify () {
 	manage_tb_modify_script "$db" $tb 				  ###   create script	
 }
 function manage_tb_modify_create () {
-	local db="$1" tb="$2"
+	local db="$1" tb="$2" ic=0 found=$false icheck=0 
 	meta_info_file="$sqlpath/meta_${tb}.txt"
 	cat  "$sqlpath/create_table_${tbcreate}.sql" 
 	echo "insert into $tbcreate (pos,field,type,nullable,default_value,primary_key) values"  
 	tb_meta_info "$db" "$tb";cp $tmpf $meta_info_file 
 	while read -r line;do
+	    log "$line"
 	    IFS=",";fields=( $line );unset IFS;nline="";del=""
 	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
-			arr=$(echo ${fields[$ia]} | tr -d '"' | tr -d "'")
+			arr=${fields[$ia]}
 			case "$ia" in
-				0)		arr="${arr}0"  ;;
+				0)		arr="${arr}0";maxpos=$arr  ;;
 				3)		if [ "$arr"  = "1" ];then  arr="false" ;else  arr="true" ;fi;;
 				5)		if [ "$arr"  = "1" ];then  arr="true"  ;else  arr="false" ;fi;;
 				*)  	nop
@@ -1213,7 +1156,30 @@ function manage_tb_modify_create () {
 		IFS=",";arr=($line) 
 		echo "update $tbcreate set ref_table = \"${arr[2]}\", ref_field = \"${arr[4]}\"," \
 			 "on_update = \"${arr[5]}\", on_delete = \"${arr[6]}\" where field = \"${arr[3]}\";"  
-	done  
+	done 
+###	check info
+	erg=$(sql_execute "$db" ".schema $tb")
+    str="${erg#*\(}"
+    erg=",${str%\)*}"
+    for ((ia=0;ia<${#erg};ia++)) ;do
+		b="${erg:$ia:1}"
+		if [ "$b" = "(" ];then ic=$(($ic+1));found=$false;fi
+		if [ "$b" = ")" ];then ic=$(($ic-1));fi 
+		if [ "$b" = ")" ] && [ "$ic" -eq 0 ];then
+#			check=$(echo $check | tr "'" '"')
+			if [ "$field" = "check" ];then 
+				echo "	  insert into $tbcreate (field,check_const,pos) values (\"check$((icheck++))\",\"${check:1}\",\"$((maxpos + $icheck))\");"    
+			else 
+				echo "	  update $tbcreate set check_const = \"${check:1}\" where field = \"$field\";"
+			fi
+			continue
+		fi 
+		if [ "$ic" -gt 0 ];then check="${check}${b}";continue;fi
+		if [ "$b"  = "," ];then found=$true;field="";check="";continue;fi
+		if [ "$b"  = " " ] && [ "$found" = "$true" ] && [ "$field"  = "" ];then continue;fi
+		if [ "$b"  = " " ] && [ "$found" = "$true" ] && [ "$field" != "" ];then found="$false";continue;fi
+		if [ "$b" != " " ] && [ "$found" = "$true" ];then field="${field}${b}";continue;fi
+	done 
 }
 function manage_tb_modify_script () {
 	local db="$1" tb="$2" del=""
@@ -1221,19 +1187,27 @@ function manage_tb_modify_script () {
 	echo "	  create table ${tb}_copy as select * from $tb;" 	
 	echo "	  drop table if exists $tb;" 						
 	echo "    create table if not exists $tb (" 
-	stmt="select field,type 
+	stmt="select field,type
 			 ,case when isunique = 'true' 		then 'unique' 			else '' end
 			 ,case when nullable = 'true' 		then '' 				else 'not null' end
 			 ,case when default_value != '' 	then 'default #' || default_value || '#'   else '' end
 			 ,case when primary_key = 'true' 	then 'primary key' 		else '' end
 			 ,case when auto_increment = 'true' then 'autoincrement' 	else '' end
-			  from $tbcreate order by pos
+			 ,case when check_const != '' 		then 'check(' || replace(check_const,',',';') || ')' 	else '' end
+			  from $tbcreate where field not like 'check%' order by pos
 		"
-	sql_execute "$dbcreate" "$stmt" | tr '",' ' ' | tr '#' '"' |
+	sql_execute "$dbcreate" "$stmt" | tr '",' ' ' | tr '#' '"' | tr ';' ',' |
 	while read -r f t line;do
 		printf "%8s %-20s %-10s %s \n" "$del" "$f" "$t" "$line" 
 		del=","
 	done
+	stmt="select check_const from $tbcreate where field like 'check%'" 
+	sql_execute "$dbcreate" "$stmt" | trim -c '"' |
+	while read -r  line;do 
+	    $line
+		printf "%8s %s\n" "," "check(${line})"
+	done
+ 
 	sql_execute "$dbcreate" "select distinct foreign_table from $tbcreate where foreign_table != ''" |
 	while read -r line;do
 		str1=$(sql_execute "$dbcreate" "select field from $tbcreate where foreign_table = '$line'" | fmt -w 500 | tr ' ' ',')
@@ -1251,8 +1225,8 @@ function manage_tb_modify_script () {
 ### trigger info
 	sql_execute $db "select sql from sqlite_master where type = \"trigger\" and tbl_name = \"$tb\";" |  tr -d '"' | tr '[:upper:]' '[:lower:]'  
 	echo "--"
-	TINSERT=$(sql_execute "$dbcreate" "select field     from $tbcreate where field != '$PRIMARYKEY' order by pos" | fmt -w 500 | tr ' ' ',')
-	TSELECT=$(sql_execute "$dbcreate" "select field_old from $tbcreate where field != '$PRIMARYKEY' order by pos" | fmt -w 500 | tr ' ' ',' | tr -d '"')
+	TINSERT=$(sql_execute "$dbcreate" "select field     from $tbcreate where field != '$PRIMARYKEY' and field not like 'check%' order by pos" | fmt -w 500 | tr ' ' ',')
+	TSELECT=$(sql_execute "$dbcreate" "select field_old from $tbcreate where field != '$PRIMARYKEY' and field not like 'check%' order by pos" | fmt -w 500 | tr ' ' ',' | tr -d '"')
 }
 function parm_from_rule () {
 	local db="$1" tb="$2" parm=${@:3} nparm="" vparm="" del="" del2="" value="" avlue="" iv=0
@@ -1332,7 +1306,7 @@ function rc_sql_execute () {
 		 "lt")		nkey=$(sql_execute "$db" ".header off\nselect $PRIMKEY from $tb where $PRIMKEY < $row order by $PRIMKEY desc limit 1");;
 		 "gt")		nkey=$(sql_execute "$db" ".header off\nselect $PRIMKEY from $tb where $PRIMKEY > $row order by $PRIMKEY      limit 1");;
 		 "delete")	sql_execute "$db" "delete from $tb where $PRIMKEY = $row " ;;
-		 "update")	nkey=$row;sql_execute "$db" "$TUPDATE" ;;
+		 "update")	set +x;nkey=$row;sql_execute "$db" "$TUPDATE" ;;
 		 "insert")	nkey=$(sql_execute "$db" "${TINSERT};select last_insert_rowid()")
 					if [ "$?" -gt "0" ]  ;then return 1;fi;;
 		  *)  		nop
@@ -1347,6 +1321,11 @@ function rc_sql_execute () {
 			return 0
 		fi
 	fi
+	case "$mode" in "eq"|"lt"|"gt")	return;; esac
+	msg="succes $mode $PRIMKEY = $row"
+	file=$(get_filename "${tpath}/dump" "$tb" "$db" ".sql") 
+	if [ -f "$file" ];then return ;fi
+	ctrl_manage_tb "$db" "$tb" "dump" "$file"
 	return
 	case "$mode" in
 		"eq"|"lt"|"gt")	nop;;
@@ -1386,7 +1365,7 @@ function rc_sql_execute_sync () {
 	if [ "$pid" = "" ];then pid="xxxxx";fi
 	ps -ax | grep "gtkdialog -f" | grep "change_row" | grep -v "grep" | grep -v "$pid" | tr -s ' ' | cut -d ' ' -f2 |
 	while read -r lpid;do
-		erg=$(getconfig_db "parm_field,parm_value" "row_gui" "%" | grep "$lpid" | grep -v "grep")
+		erg=$(getconfig_db "parm_field,parm_value" "row_gui" "%" | grep "$pid" | grep -v "grep")
 		kpid=${erg%\,*};mpid=${erg#*\,}
 		id=$(<$(get_input_filename "$db" "$tb" "$PRIMKEY" "$kpid"))
 		if [ "$id" != "$rowid" ];then continue ;fi
@@ -1410,6 +1389,14 @@ function rc_sql_execute_sync () {
 	done
 }
 function get_input_filename () { echo "${tpath}/inputfile_$4_$3"$(echo "$1_$2" | tr '/. ' '_')".txt"; }
+function get_filename () {
+	local del="" file=""
+	while [ $# -gt 0 ];do
+		if [ -f "$1" ]; then arg=$(echo "$1" | tr '/._' '_#_');else arg="$1";fi
+		file="$file$del$arg";shift;del="_"
+	done
+	echo "${file//_\./\.}" | tr -s '_'
+}
 function get_fileselect () { 
 	type="searchpath";field="$1";shift;save="$*" 
 	if [ "$field" = "--save" ];then save=$field ;field=""  ;fi
@@ -1551,3 +1538,4 @@ function command_rules_list_fields () {
 }
 function zz () { return; } 
 	ctrl $*
+	exit

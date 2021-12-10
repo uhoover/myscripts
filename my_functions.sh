@@ -501,7 +501,7 @@ function func_trim () {
 	   cat "$line"
 	else
 	   if [ "$line" == "" ]; then
-		  echo "cat stdin"
+#		  echo "cat stdin"
 		  cat < /dev/stdin
 	   else
 		  echo "$line"
