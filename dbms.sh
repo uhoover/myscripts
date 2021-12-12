@@ -28,6 +28,7 @@ function ctrl () {
 	dpath="/var/tmp/dump_${folder%%\.*}" 
 	[ ! -d "$path" ]     && mkdir 	 "$path"  
 	[ ! -d "$tpath" ]    && mkdir 	 "$tpath"	&& ln -sf "$tpath"	  "$path/tmpdbms" 
+	[ ! -f "$tpath/socket" ]                    && echo $(date "+%Y_%m_%d_%H_%M_%S_%N") > "$tpath/socket" 
 	[ ! -d "$path/tmp" ] && mkdir 	 "$path/tmp"  
 	[ ! -d "$xpath" ]	 && mkdir 	 "$xpath"  
 	[ ! -d "$epath" ]    && mkdir 	 "$epath"   && ln -sf "$epath"    "$path"   
@@ -204,6 +205,7 @@ function ctrl_rollback () {
 		set -- $line;tb=$2;db=${@:3}
         ctrl_manage_tb "$db" "$tb" "restore" "$file"
 	done
+	rm -f "${tpath}/dump*"
 }
 function ctrl_tb () {
 	log debug $*
@@ -377,11 +379,17 @@ function tb_gui_get_xml() {
 	dbfile="${tpath}/input_${label}_db.txt"
 	tbfile="${tpath}/input_${label}_tb.txt"
 	whfile="${tpath}/input_${label}_wh.txt"
+#	<action>'$script' --func ctrl_tb_gui "input | '$label' | '$db' | '$tb' | defaultwhere"</action>
 	echo '    <vbox>
 		<entry visible="false">
             <variable>DUMMY'$label'</variable>
 			<input>'$script' --func ctrl_tb_gui "input | '$label' | '$db' | '$tb' | defaultwhere"</input>
         </entry>
+        <entry auto-refresh="true" visible="false">
+            <variable>DUMMY2'$label'</variable>
+			<input file>"'$tpath/socket'"</input> 
+			<action type="refresh">DUMMY'$label'</action>
+		</entry>
 		<tree headers_visible="true" hover-selection="false" hover-expand="true" auto-refresh="true" 
 		 exported_column="'$ID'" sort-column="'$ID'" column-sort-function="'$sorttype'" '$selected_row'>
 			<label>"'$lb'"</label>
@@ -693,11 +701,16 @@ function rc_gui_get_xml () {
 	stmt="select * from rules where rules_db = \"$db\" and rules_tb = \"$tb\" and rules_status < 9"
 	sql_execute $dbparm ".mode line\n$stmt" > "${rulesfile}${tb}_$(echo $db | tr '/' '_').txt"
 	setconfig_db "defaultrowid|$db $tb $pid|$key"
-	echo '<vbox hscrollbar-policy="0" vscrollbar-policy="0" space-expand="true" scrollable="true">'
-	echo '			<entry width_chars="'$sizeentry'" space-fill="true" visible="false">'
-	echo '				<variable>entrydummy</variable>'
-	echo '				<input>'$script' --func ctrl_rc_gui "entryp | '$db '|' $tb '|' ${PRIMKEY} '| $entryp |' $entrys '|' ${pid}'"</input>'
-	echo ' 			</entry>' 
+	echo '<vbox hscrollbar-policy="1" vscrollbar-policy="1" space-expand="true" scrollable="true">'
+	echo '	<entry width_chars="'$sizeentry'" space-fill="true" visible="false">'
+	echo '		<variable>entrydummy</variable>'
+	echo '		<input>'$script' --func ctrl_rc_gui "entryp | '$db '|' $tb '|' ${PRIMKEY} '| $entryp |' $entrys '|' ${pid}'"</input>'
+	echo ' 	</entry>' 
+	echo '  <entry auto-refresh="true" visible="false">'
+	echo '		<variable>entrydummy2</variable>'
+	echo '		<input file>"'$tpath/socket'"</input> '
+	echo '		<action type="refresh">entrydummy</action>' 
+	echo '	</entry>'
 	echo '	<vbox space-expand="false">'
 	echo '		<hbox>'
 	echo '			<entry width_chars="'$sizeentry'" space-fill="true" auto-refresh="true">'
@@ -776,12 +789,12 @@ function rc_gui_get_rule() {
 }
 function ctrl_manage_tb () {
 	local db="$1" tb="$2" func="$3" ifile="$4" 
-	local drop=$false create=$false edit=$false import=$false dump=$false restore=$false errmsg="" 
+	local drop=$false create=$false edit=$false import=$false dump=$false restore=$false commit="$false" rollback="$false" errmsg="" 
 	if [ "$db"   = "" ];then db=$(dbms.sh --func get_fileselect database_import "" --save);fi
 	if [ "$db"   = "" ];then setmsg -n "abort..no db selected"; return ;fi
 	if [ -f "$db" ]	    && [ "$tb" = "" ];   then tb=$(zenity --list --column table 'new' $(dbms.sh --func tb_get_tables $db));fi 
 	if [ "$func" = "" ];then 
-		func=$(zenity --list --height=270 --column action "drop" "modify with schema" "modify with table" "import" "dump" "restore")
+		func=$(zenity --list --height=300 --column action "drop" "modify with schema" "modify with table" "import" "dump" "restore" "commit" "rollback")
 	fi
 	if 	 [ "$(echo $func | grep 'drop')" 	!= "" ]; 	then drop=$true									 
 	elif [ "$(echo $func | grep 'schema')" 	!= "" ]; 	then create=$true								 
@@ -874,6 +887,10 @@ function ctrl_manage_tb () {
 		if [ "$?" -gt 0 ];then return;fi
 		errmsg="$func : created $tb from $ifile"
 		rc_sql_execute_sync "restore" "$db" "$tb"
+	elif [ "$commit" = "$true" ]; then
+		rm "${tpath}/dump*"
+	elif [ "$rollback" = "$true" ]; then
+		ctrl_rollback
 	fi	
 	if [ "$errmsg" != "" ];then setmsg -i "$errmsg";return  ;fi
 	xdg-open $readfile
@@ -886,6 +903,7 @@ function ctrl_manage_tb () {
 			stmt="delete from $tbparm where parm_type='defaulttable' and parm_field like \"%${db}%\" and parm_value = \"$tb\"" 
 			sql_execute "$dbparm" "$stmt" 
 		fi
+		if [ "$create" = "$trueif" ] || [ "$drop" = "$true" ];then rc_sql_execute_sync  ;fi
 		return 
 	fi
 	setmsg -q "${tb}_copy loeschen?" 
@@ -1340,6 +1358,7 @@ function rc_sql_execute () {
 	esac
 }
 function rc_sql_execute_sync () {
+	echo $(date "+%Y_%m_%d_%H_%M_%S_%N") > "$tpath/socket";return
 	local func="$1" db="$2" tb="$3" PRIMKEY="$4" rowid="$5" pid="$6" 
 	log psax $(ps -ax | grep "gtkdialog -f" | grep -v "change_row" | grep -i -e "$(basename $db)" -e "$tb" -e "selectDB")
 	ps -ax | grep "gtkdialog -f" | grep -v "change_row" | grep -i -e "$(basename $db)" -e "$tb" -e "selectDB" |
