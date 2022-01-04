@@ -252,7 +252,7 @@ function func_start() {
 }
 function func_end() {
 	rc=$?; if [ "$retcode" != "" ]; then rc=$retcode;fi
-    info=" \n$(date "+%Y-%m-%d %H:%M:%S")  $(hostname) $0: STOP - rc = $rc CPU-TIME $SECONDS \n"
+    info=" \n$(date "+%Y-%m-%d %H:%M:%S")  $(hostname) $0: STOP - rc = $rc CPU-TIME $SECONDS\n"
     func_log $info
 }
 function func_date2stamp () {
