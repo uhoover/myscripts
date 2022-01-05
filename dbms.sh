@@ -11,16 +11,17 @@ function axit() {
   	if [ "$cmd" = "" ]; then log stop;fi
 }
 function ftest () {
-	if [ "$1" = "stmt" ];then getstmt="$true";shift ;else getstmt="$false" ;fi
-	getfield="$1";shift;type="$1";shift;field="$1";field=$(echo "$field" | tr ' ' '_');shift;default="$1";shift;where=$*
-	ix=$(pos '%' $field);if [ "$ix" -gt "-1" ];then eq1="like"  ;else eq1="=" ;fi
-	ix=$(pos '%' $type); if [ "$ix" -gt "-1" ];then eq2="like"  ;else eq2="=" ;fi
-	stmt=".header off\nselect $getfield from $tbparm where parm_field $eq1 \"$field\" and parm_type $eq2 \"$type\" $where" 
-	if [ "$getstmt" = "$true" ];then echo "$stmt";return;fi
-	value=$(sql_execute $dbparm "$stmt") 
-	if [ "$?" -gt "0" ];then return 1 ;fi
-	if [ "$value" = "" ] &&  [ "$default" != "" ];then value="$default";setconfig_db   "$type|$field|$value" ;fi
-	echo -e "$value";return 0
+	db="$1";if [ "$db" = "" ];then db="/home/uwe/my_databases/music.sqlite"  ;fi
+	(
+	sql_execute "$db" "select composer_id, composer_name_last, composer_name_first from composer where composer_id < 100;" | 
+	tr -d '"' | tr ',' ' ' | 
+	while read -r id name ;do 
+	    l=""
+	    for n in $name;do l="$l${n:0:1}";done
+	    echo "update composer set composer_name_short = '$l' where composer_id = $id;"
+#		printf "%-2s %35s %s\n" "$id" "$name" "$l"
+	done 
+	) > "$tmpf" 
 }
 function ctrl () {
 	log file tlog verbose  
@@ -262,7 +263,8 @@ function ctrl_tb () {
     done < $tmpf
     for ((ia=0;ia<${#cboxtba[@]};ia++)) ;do
 		if [ "${cboxtba[$ia]}" != "" ];	then
-			setconfig_db   "defaulttable|${labela[$ia]}_${entrya[$ia]}|${cboxtba[$ia]}"  
+#			setconfig_db   "defaulttable|${labela[$ia]}_${entrya[$ia]}|${cboxtba[$ia]}"  
+			setconfig_db   "defaulttable|${entrya[$ia]}|${cboxtba[$ia]}"  
 		fi     
 		if [ "${treea[$ia]}" != "" ];	then
 			setconfig_db   "defaultrow|${labela[$ia]}_${entrya[$ia]} ${cboxtba[$ia]}|${treea[$ia]}" 
@@ -271,7 +273,7 @@ function ctrl_tb () {
 	ctrl_rollback 
 }
 function ctrl_tb_gui () {
-	log   $*
+	log debug $*
 	pparm=$*;IFS="|";parm=($pparm);unset IFS 
 	local func=$(trim_value ${parm[0]}) pid=$(trim_value ${parm[1]}) label=$(trim_value ${parm[2]}) 
 	local db=$(trim_value ${parm[3]})   tb=$(trim_value ${parm[4]})  value=$(trim_value ${parm[@]:5})
@@ -321,7 +323,8 @@ function ctrl_tb_gui () {
 		"table") 	wh="$(getconfig_db parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes)"
 					tb_get_where $label "$db" "$tb" "$wh" > "$whfile"
 					tb_read_table "$pid" "$label" "$db" "$tb" "$wh"
-					setconfig_db   "defaulttable|$label $db|$tb";;
+#					setconfig_db   "defaulttable|$label $db|$tb";;
+					setconfig_db   "defaulttable|$db|$tb";;
 	    "b_utiltb") ctrl_utils "$db" "$tb";;
 		"b_utils")  ctrl_utils "" "";;
 		"where") 	tb_read_table "$pid" "$label" "$db" "$tb" "$value";;
@@ -341,12 +344,16 @@ function ctrl_tb_gui () {
 		"b_update") ctrl_rc "$value" "$db" "$tb";;
 		"b_config")	setconfig_db   "defaultwhere|$tbparm $dbparm $tbparm|where parm_field like \"%${db}_${tb}\" or parm_type = \"config\"" 
 					$rxvt -e $script $dbparm $tbparm --notable &  ;;
-		"b_clone")	$rxvt -e $script $db	 $tb 	 --notable &  ;;
+#		"b_clone")	$rxvt -e $script $db	 $tb 	 --notable &  ;;
+		"b_clone")	bash -c "$script $db $tb --notable" &  ;;
 		"b_insert")	ctrl_rc "insert" "$db" "$tb" ;;
 		"b_refresh") "$FUNCNAME" "input | $pid | $label | $db | $tb | defaultwhere" ;;
 		"b_exit")	save_geometry "$value" ;;
 		*) 			setmsg -w "$func nicht bekannt"
-	esac	
+	esac
+	#~ case $func in	
+	   #~ "b_clone"|"b_config") wmctrl -a dbms.sh -b toggle,shaded ;;
+	#~ esac
 }
 function tb_get_where () {
 	local label="$1" db="$2" tb="$3" wh="${@:4}"
@@ -673,9 +680,9 @@ function ctrl_rc_gui () {
 		 *) 				setmsg -i -d --width=400 "func $func nicht bekannt\ndb $db\ntb $tb\nfield $field\nentry $entry"
 	esac
 	if [ "$msg" != "" ];then setmsg -n "$msg"  ;fi
-	case $func in
-		"button_update"|"button_delete"|"button_insert") rc_sql_execute_sync "$func" "$db" "$tb" "$PRIMKEY" "$key" "$pid";;
-	esac
+	#~ case $func in
+		#~ "button_update"|"button_delete"|"button_insert") rc_sql_execute_sync "$func" "$db" "$tb" "$PRIMKEY" "$key" "$pid";;
+	#~ esac
 }
 function ctrl_rc_gui_defaults () {
 	local db="$1" tb="$2" pid="$3" file=""
@@ -821,7 +828,7 @@ function rc_gui_get_rule() {
 function ctrl_utils () {
 	local db="$1" tb="$2" func="$3" ifile="$4" drop_list=""
 	local drop=$false create=$false edit=$false read=$false import=$false dump=$false restore=$false commit="$false" rollback="$false" rules="$false" errmsg="" 
-	if [ "$db"   = "" ];then db=$(dbms.sh --func get_fileselect database_import "" --save);fi
+	if [ "$db"   = "" ];then db=$(get_fileselect database_import --save);fi
 	if [ "$db"   = "" ];then setmsg -n "abort..no db selected"; return ;fi
 	if [ -f "$db" ]	    && [ "$tb" = "" ];   then tb=$(zenity --list --column table 'new' $(dbms.sh --func tb_get_tables $db));fi 
 	if [ "$func" = "" ];then 
@@ -831,7 +838,7 @@ function ctrl_utils () {
 	elif [ "$(echo $func | grep 'schema')" 	!= "" ]; 	then create=$true								 
 	elif [ "$(echo $func | grep 'table')" 	!= "" ]; 	then edit=$true;create=$true					 
 	elif [ "$(echo $func | grep 'read')" 	!= "" ]; 	then read=$true
-	elif [ "$(echo $func | grep 'import')" 	!= "" ]; 	then import=$true
+	elif [ "$(echo $func | grep 'import')" 	!= "" ]; 	then import=$true;tb=""
 	elif [ "$(echo $func | grep 'dump')" 	!= "" ]; 	then dump=$true
 	elif [ "$(echo $func | grep 'restore')" != "" ]; 	then restore=$true
 	elif [ "$(echo $func | grep 'rules')"	!= "" ]; 	then rules=$true
@@ -1174,7 +1181,8 @@ function parm_from_rule () {
 	IFS="#";value=($parm);unset IFS
   	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
-		arg=$(echo ${value[$iv]} | tr  ',' ' ' | tr -d '"')
+#		arg=$(echo ${value[$iv]} | tr  ',' ' ' | tr -d '"')
+		arg=$(echo ${value[$iv]} | tr  ',' ',' | tr -d '"')
 		iv=$((iv+1))
 		if [ "$arg" = "" ];    			then nparm=$nparm$del$arg;del="#";continue;fi
 		if [ "$arg" = "null" ];			then nparm=$nparm$del$arg;del="#";continue;fi
@@ -1183,7 +1191,7 @@ function parm_from_rule () {
 		if [ "$SCMD2" = "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
 		if [ "$SCMD2" = "" ]; 			then SCMD2=0;fi
 		IFS=",";range=($SCMD2);unset IFS
-		IFS=" ";avalue=($arg);unset IFS
+		IFS=", ";avalue=($arg);unset IFS
 		vparm="";del2=""
 		for arg in ${range[@]}; do vparm=$vparm$del2${avalue[$arg]};del2=" ";done
 		nparm=$nparm$del$vparm;del="#"
@@ -1239,7 +1247,7 @@ function rc_read_tb () {
 	echo $(getconfig_db parm_value defaultrowid "${db}_${tb}_${pid}") > "$file"
 }
 function rc_sql_execute () {
-	log debug $FUNCNAME $@
+	log  debug $FUNCNAME $@
 	local db="$1" tb="$2" mode="$3" PRIMKEY="$4" row="$5" pid="$6" parm=${@:7}
 	if [ "$row" = "" ];then row=$(getconfig_db parm_value defaultrowid "${db}_${tb}_${pid}");fi
 	tb_meta_info $db $tb $row $(parm_from_rule "$db" "$tb" "$parm")
@@ -1263,11 +1271,17 @@ function rc_sql_execute () {
 		 "gt")		nkey=$(sql_execute "$db" ".header off\nselect $PRIMKEY from $tb where $PRIMKEY > $row order by $PRIMKEY      limit 1");;
 		 "delete")	sql_execute "$db" "delete from $tb where $PRIMKEY = $row " ;;
 		 "update")	nkey=$row;sql_execute "$db" "$GTBUPDATE" ;;
-		 "insert")	nkey=$(sql_execute "$db" "${GTBINSERT};select last_insert_rowid()")
-					if [ "$?" -gt "0" ]  ;then return 1;fi;;
+#		 "insert")	nkey=$(sql_execute "$db" "${GTBINSERT};select last_insert_rowid()")
+ 		 "insert")	sql_execute "$db" "${GTBINSERT}";;
 		  *)  		nop
 	esac
 	if [ "$?" -gt "0" ]  ;then msg="error $mode $PRIMKEY = $row";return 1;fi
+	case $modr in
+		"button_update"|"button_delete"|"button_insert") rc_sql_execute_sync "$func" "$db" "$tb" "$PRIMKEY" "$key" "$pid";;
+	esac
+	if [ "$mode" = "insert" ]  ;then 
+		nkey=$(sql_execute "$db" "select max($PRIMKEY) from $tb")
+	fi
 	if [ "$nkey" != "" ] ;then 
 		setconfig_db "defaultrowid|${db}_${tb}_${pid}|$nkey"
 		rc_read_tb "read" "$db" "$tb" "$pid" "$PRIMKEY" "$nkey"
@@ -1292,7 +1306,7 @@ function get_filename () {
 	echo "${file//_\./\.}" | tr -s '_'
 }
 function get_fileselect () { 
-	local type="searchpath" field="$1" save="${@:2}*" 
+	local type="searchpath" field="$1" save="${@:2}" 
 	if [ "$field" = "--save" ];then save=$field ;field=""  ;fi
 	if [ -f  "$field" ]; then
 		path=$field;field=""
