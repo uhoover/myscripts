@@ -682,7 +682,7 @@ function func_while_file () {
 }
 function dofile () { func_while_file "$@"; }
 function func_quote (){
-    line="";ql='"';qr='"';i=0;gap="";file="";x=0;delimiter=",";remove=$false
+    local line="" ql='"' qr='"' i=0 gap="" file="" x=0 delimiter="," remove=$false
     while [ $# -gt 0 ] ;do
 		if [ "$(echo $1 | grep -e '^-[a-z].')" ]; then # zB -avcb
 			nparm=$(func_mygetopt $1)
@@ -1110,8 +1110,8 @@ function func_init () {
 	export w2linux="func_translate -i ':\,\' -o '/,/' /"
 }
 function nop () { return; }
-save_geometry (){
-	str=$*;IFS='#';local arr=( $str );unset IFS; window=${arr[0]};gfile=${arr[1]};glabel=${arr[2]}
+function save_geometry (){
+	str=$*;IFS='#';local arr=( $str );unset IFS; local window=${arr[0]} gfile=${arr[1]} glabel=${arr[2]}
 	XWININFO=$(xwininfo -stats -name "$window")
 	if [ "$?" -ne "0" ];then func_setmsg -i "error XWINFO";return  ;fi
 	HEIGHT=$(echo "$XWININFO" | grep 'Height:' | awk '{print $2}')
@@ -1122,11 +1122,12 @@ save_geometry (){
 	Y2=$(echo "$XWININFO" | grep 'Relative upper-left Y' | awk '{print $4}')
 	X=$(($X1-$X2))
 	Y=$(($Y1-$Y2))
+	setconfig "geometry|$glabel|${WIDTH}x${HEIGHT}+${X}+${Y}"
+	if [ "$gfile" = "" ];then return ;fi
 	echo "HEIGHT=$HEIGHT"  >  "$gfile"
 	echo "WIDTH=$WIDTH"    >> "$gfile"
 	echo "X=$X"            >> "$gfile"
 	echo "Y=$Y"            >> "$gfile"
-	setconfig_db "geometry|$glabel|${WIDTH}x${HEIGHT}+${X}+${Y}"
 	chmod 700 "$gfile"
 }
 trap_init
