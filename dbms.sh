@@ -4,56 +4,17 @@
 # version 1.0.0
 # function: dbms for sqlite
 # 
- source /home/uwe/my_scripts/my_functions.sh
  trap axit EXIT
  set -o noglob
 function axit() {
-  	if [ "$cmd" = "" ]; then log stop;fi
-  	if [ "$rxtitle" != "" ]; then
-		wmctrl -a "$rxtitle" -b toggle,shaded 
-	fi	
+  	if [ "$cmd" = "" ]; then log logoff;fi
 }
 function ftest () {
-	set -x
-    local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" "$db" ".sql")
-	is_table "$db" "$tb"; if [ $? -lt 1 ]; then return;fi 
-	cat << EOF > "$file"
-create table $tb(
-	"${tb}_id" integer primary key autoincrement not null unique,
-	"${tb}_status" integer not null default '0',
-	"${tb}_name" text,
-	"${tb}_type" text not null default 'liste',
-	"${tb}_db" text not null,
-	"${tb}_tb" text not null,
-	"${tb}_field" text not null,
-	"${tb}_db_ref" text,
-	"${tb}_tb_ref" text,
-	"${tb}_action" text,
-	"${tb}_parms" text,
-	"${tb}_receive_list" text,
-	"${tb}_info" text
-);
-insert into $tb values(1,0,'${tb}_type_liste','liste','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_type','','','liste@reference@table@fileselect@command','null','0','liste from string, separator must be @');
-insert into $tb values(2,0,'${tb}_db_fileselect','fileselect','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_db',null,null,'action@/home/uwe/my_scripts/dbms.sh --func rules_command rules',NULL,'0','fileselect');
-insert into $tb values(3,0,'${tb}_db_reference','reference','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_status','/home/uwe/my_databases/parm.sqlite','parms','select parm_value from parms where parm_type = ''status'' and substr(parm_value,1,instr(parm_value,'' '' )-1)','','0','complex sql possible - script completes with operator and field');
-insert into $tb values(4,0,'${tb}_tb_command','command','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_tb','','','input@action@/home/uwe/my_scripts/dbms.sh --func rules_command rules','','0','call rules_action with tag  db  tb  pid  fieldname  fieldvalue  parmlist - delimited by pipe');
-insert into $tb values(5,0,'${tb}_db_fileselect','fileselect','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_db_ref','','','action@/home/uwe/my_scripts/dbms.sh --func rules_command rules','','0','fileselect');
-insert into $tb values(6,0,'${tb}_tb_command','command','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_tb_ref','','','input@action@/home/uwe/my_scripts/dbms.sh --func rules_command rules','','0','get list of table names');
-insert into $tb values(7,0,'${tb}_tb_command','command','/home/uwe/.dbms/parm.sqlite','$tb','${tb}_field','','','input@/home/uwe/my_scripts/dbms.sh --func rules_command rules','','0','get list of field names');
-insert into $tb values(8,0,'modify_tb_command','command','/home/uwe/.dbms/parm.sqlite','modify','foreign_table','','','input@action@/home/uwe/my_scripts/dbms.sh --func rules_command rules','','0','get list of table names');
-insert into $tb values(9,0,'modify_field_command','command','/home/uwe/.dbms/parm.sqlite','modify','foreign_field','','','input@/home/uwe/my_scripts/dbms.sh --func rules_command rules','','0','get list of field names');
-insert into $tb values(10,0,'modify_boolean','liste','/home/uwe/.dbms/parm.sqlite','modify','type','','','integer@real@text@blob','','0',NULL);
-insert into $tb values(11,0,'modify_boolean','liste','/home/uwe/.dbms/parm.sqlite','modify','auto_increment','','','true@false','','0',NULL);
-insert into $tb values(12,0,'modify_boolean','liste','/home/uwe/.dbms/parm.sqlite','modify','isunique','','','true@false','','0',NULL);
-insert into $tb values(13,0,'modify_boolean','liste','/home/uwe/.dbms/parm.sqlite','modify','nullable','','','true@false','','0',NULL);
-insert into $tb values(14,0,'modify_boolean','liste','/home/uwe/.dbms/parm.sqlite','modify','primary_key','','','true@false','','0',NULL);
-create unique index ix_${tb}_dbtbfield on ${tb}(${tb}_db,${tb}_tb,${tb}_field);
-EOF
-    setmsg -i pause
-    sql_execute "$db" ".read" "$file"
+	return
 }
 function ctrl () {
-	log file tlog verbose  
+	declare true=0 false=1 debug=1
+	alias log='log $LINENO'
 	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
 	tpath="/tmp/.${folder%%\.*}";xpath="$path/xml" 
 	dbpath="$HOME/db";sqlpath="$dbpath/sql";ipath="$dbpath/import";rpath="$dbpath/read" 
@@ -76,11 +37,10 @@ function ctrl () {
 	x_configfile="$path/.configrc" 
 	dbparm="$path/sysmaster.sqlite" 
 	dbrules="$dbparm" 
-	dbrules2="/home/uwe/my_databases/parm.sqlite" 
 	dbcreate="$dbparm" 
 	tbparm="sysparms"
-	tbrules="rules"
-	tbcreate="modify"
+	tbrules="sysrules"
+	tbcreate="syscreate"
 	pid=$$
 	ctrl_systb_master "$dbparm"   "$tbparm" 
 	limit=$(getconfig "parm_value" "config" "limit" 500)
@@ -88,13 +48,20 @@ function ctrl () {
 	term_heigth=$(getconfig "parm_value" "config" "term_heigth" 8)
 	wtitle=$(getconfig "parm_value" "config" "wtitle" "dbms")
 	export=$(getconfig "parm_value" "config" "export" "$false")
-	separator=$(getconfig "parm_value" "config" "separator" "|")
+	separator=$(getconfig "parm_value" "config" "separator" "|" | tr -d '"')
 	tmpf="$tpath/tmpfile.txt"   
 	tmpf2="$tpath/tmpfile2.txt"   
 	pparms=$*
-	noselectDB=$false;myparm="";norules="$false";X=400;Y=600
+	gtkdialog -v | grep -iq "VTE";if [ $? -eq 0 ];then terminal=$true ;else terminal=$false ;fi
+	selectDB=$true;rules=$true;header=$true;
+	myparm="";X=400;Y=600
 	ctrl_fileconfig
 	source $x_configfile
+	if [ $# -eq 1 ] && [ -f "$@" ]; then
+		is_database "$@"
+		if [ $? -gt 0 ];then utils_ctrl "" "" "" "$@";exit ;fi
+	fi
+	log tlog    
 	declare -g	GTBNAME="" 	 GTBTYPE=""   GTBNOTN="" GTBDFLT="" GTBPKEY="" GTBMETA="" GTBSELECT="" GTBINSERT="" 
 	declare -g  GTBUPDATE="" GTBUPSTMT="" GTBSORT="" GTBMAXCOLS=-1
 	while [ "$#" -gt 0 ];do
@@ -104,9 +71,10 @@ function ctrl () {
 	        "--version"|-v)  				            echo "version 0.9.1" ;;
 	        "--vb"|--verbose|--verbose-log)  			log verbose_on ;;
 	        "--func"|-f|--execute-function)  			shift;cmd="nostop";log debug $pparms;$@;return ;;
-	        "--noselectDB"|--no-tab-with-db-selection)	noselectDB=$true ;;
-	        "--nolabel"|--no-notebook-label)			nolabel=$true ;;
-	        "--norules"|--no-extra-widgets)				norules="true" ;;
+	        "--noselectDB"|--no-tab-with-db-selection)	selectDB=$false ;;
+	        "--noheader"|--no-header-for-selectDB)		header=$false;;
+	        "--norules"|--no-extra-widgets)				rules=$false;;
+	        "--noterminal"|--no-terminal-widgets)		terminal=$false;;
 	        "--window"|-w|--window-title)			    shift;wtitle="$1" ;;
 	        "--geometry_tb"|--gtb|--HEIGHTxWIDTH+X+Y)	shift;geometry_tb="$1" ;;
 	        "--geometry_rc"|--grc|--HEIGHTxWIDTH+X+Y)	shift;geometry_rc="$1" ;;
@@ -118,13 +86,13 @@ function ctrl () {
 	    esac
 	    shift
 	done
-	log start
+	log logon
 	tb_ctrl $myparm	
 }
 function ctrl_systb_rules() {
-	local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" "$db" ".sql")
+	local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" $(echo "$db" | tr '/.' '-#') ".sql")
 	is_table "$db" "$tb"; if [ $? -lt 1 ]; then return;fi 
-	cat << EOF > "$file"
+	cat <<EOF > "$file"
 create table $tb (
 	"rules_id" integer primary key autoincrement not null unique,
 	"rules_status" integer not null default '0',
@@ -159,9 +127,9 @@ EOF
     sql_execute "$db" ".read" "$file"
 }
 function ctrl_systb_master() {
-	local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" "$db" ".sql")
+	local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" $(echo "$db" | tr '/.' '-#') ".sql")
 	is_table "$db" "$tb"; if [ $? -lt 1 ]; then return;fi 
-	cat << EOF >> "$file"
+	cat <<EOF > "$file"
 create table $tb (
 	parm_id 	integer primary key autoincrement not null,
 	parm_status text 	default 0,
@@ -179,10 +147,9 @@ EOF
 	sql_execute "$db" ".read" "$file"
 }
 function ctrl_systb_modify() {
-	local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" "$db" ".sql")
-#	is_table "$db" "$tb"; if [ $? -lt 1 ]; then return;fi 	
+	local db="$1" tb="$2";local file=$(getfilename "$sqlpath/create_systable" "$tb" $(echo "$db" | tr '/.' '-#') ".sql")
 ##### create system table to store and manipulate table-schema	
-	cat << EOF >> "$file"
+	cat <<EOF > "$file"
 	drop table if exists $tb; 
  	create table   $tb (  
 	     crtb_id        integer primary key autoincrement not null unique, 
@@ -203,7 +170,6 @@ function ctrl_systb_modify() {
 	     field_old  	text	default 'null'
 	);  	
 EOF
-#sql_execute "$db" ".read $file"
 echo "$file"
 }
 function ctrl_fileconfig() {
@@ -220,15 +186,16 @@ function ctrl_fileconfig() {
 	echo "# geometry_rc=\"600x400+100+150\" 			#	set rc height,width,x,y " 	>> "$x_configfile" 	  
 }
 function ctrl_rollback () {
+	local found=$false
 	ps -ax | grep -v grep | grep "gtkdialog -f" | grep "$tpath" > "$tmpf"
 	while read -r line;do
-		log $FUNCNAME $line
+		log $line
 		return
 	done < "$tmpf"
 	find "${tpath}" -name "dump*" |
 	while read -r file;do
 		if [ "$found" = "$false" ]; then 	
-			setmsg -q "data chanded\ncommit ?"
+			setmsg -q "commit all changes"
 			if [ "$?" -eq 0 ];then find "${tpath}" -name "dump*" -delete ;return  ;fi
 			found="$true"
 		fi
@@ -240,12 +207,12 @@ function ctrl_rollback () {
 }
 function tb_ctrl () {
 	log $*
-	dbliste=$(tb_get_labels $*)												# datenbanken und tabellen ermitteln
+	dbliste=$(tb_get_labels $*)												# inquire databases/tables
 	IFS="|";arr=($dbliste);unset IFS
-	if [ "${#arr[@]}" -lt "1" ];then setmsg -i "keine gueltigen Parameter";return 1 ;fi
+	if [ "${#arr[@]}" -lt "1" ];then setmsg -i "no valid parameter";return 1 ;fi
 	notebook="";for arg in ${arr[@]};do notebook="$notebook ${arg%%#*}";done 
     geometrylabel="geometry_$(echo $notebook | tr ' ' '_')"
-    geometryfile="$tpath/${geometrylabel}.txt"
+    geometryfile=""
     xfile="$(echo $notebook | tr ' ' '_').xml"
     if [ -f "${xpath}/${xfile}" ]; then
 		xmlfile="${xpath}/${xfile}"
@@ -263,8 +230,10 @@ function tb_ctrl () {
 	fi
     if [ "$geometry_tb" = "" ];then geometry_tb=$(getconfig "parm_value" "geometry" "$geometrylabel" '800x800+100+100');fi
 ##
-    log before main dialog
+    log "run    main dialog $xmlfile"
     gtkdialog -f "$xmlfile" --geometry="$geometry_tb" > $tmpf				# start dialog
+    log "exit   main dialog $xmlfile"
+
 ##   
     while read -r line;do
 		echo $line															# save defaults
@@ -276,7 +245,6 @@ function tb_ctrl () {
     done < $tmpf
     for ((ia=0;ia<${#cboxtba[@]};ia++)) ;do
 		if [ "${cboxtba[$ia]}" != "" ];	then
-#			setconfig   "defaulttable|${labela[$ia]}_${entrya[$ia]}|${cboxtba[$ia]}"  
 			setconfig   "defaulttable|${entrya[$ia]}|${cboxtba[$ia]}"  
 		fi     
 		if [ "${treea[$ia]}" != "" ];	then
@@ -291,12 +259,12 @@ function tb_ctrl_gui () {
 	local func=$(trim_value ${parm[0]}) pid=$(trim_value ${parm[1]}) label=$(trim_value ${parm[2]}) 
 	local db=$(trim_value ${parm[3]})   tb=$(trim_value ${parm[4]})  value=$(trim_value ${parm[@]:5})
 	rxtitle=""
-	setmsg -i -d --width=600 "func $func\nlabel $label\ndb $db\ntb $tb\nvalue $value"
+	setmsg -i -d --width=600 "$FUNCNAME $func\nlabel $label\ndb $db\ntb $tb\nvalue $value"
 	dbfile="${tpath}/input_${pid}_${label}_db.txt"
 	tbfile="${tpath}/input_${pid}_${label}_tb.txt"
 	whfile="${tpath}/input_${pid}_${label}_wh.txt"
 	xxfile="${tpath}/input_${pid}_${label}_xx.txt"
-	terminal="${tpath}/input_${pid}_${label}_cmd.txt"
+	terminalfile="${tpath}/input_${pid}_${label}_cmd.txt"
 	if [ "$db" = "" ];then 
 		db=$(getconfig parm_value defaultdatabase $label)
 		if [ "$db" = "" ];then 
@@ -308,7 +276,6 @@ function tb_ctrl_gui () {
 		fi
 	fi
 	if [ "$tb" = "" ];then 
-#		tb=$(getconfig parm_value defaulttable ${label}_${db})
 		tb=$(getconfig parm_value defaulttable $db)
 		if [ "$tb" = "" ];then 
 			tb_get_tables "$db" |
@@ -316,7 +283,6 @@ function tb_ctrl_gui () {
 				setconfig "defaulttable|$db|$tb"
 				break
 			done
-#			tb=$(getconfig parm_value defaulttable ${label}_${db})
 			tb=$(getconfig parm_value defaulttable $db)
 		fi
 		if [ "$tb" = "" ];then 
@@ -328,8 +294,7 @@ function tb_ctrl_gui () {
 					echo "$db $tb" > "$xxfile"
 		            tb_get_tables "$db" "$tb" > "$tbfile"
 		            tb_get_where "$label" "$db" "$tb" > "$whfile"
-		            terminal_cmd "$terminal" "$label" "$db" 
-#		            if [ "$value" = "defaultwhere" ];then wh="$(getconfig parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes)"  ;fi
+		            terminal_cmd "$terminalfile" "$label" "$db" 
 		            if [ "$value" = "defaultwhere" ];then wh="$(getconfig parm_value defaultwhere "${db} ${tb}" | remove_quotes)"  ;fi
 					tb_read_table "$pid" "$label" "$db" "$tb" "$wh";;
 		"fselect") 	db=$(getfileselect database)
@@ -337,11 +302,9 @@ function tb_ctrl_gui () {
 					if [ "$?" -gt 0 ];then setmsg -i "$db\nno db";return;fi
 					setconfig   "defaultdatabase|$label|$db"
 					$FUNCNAME "input | $pid | $label | $db | | ";;
-#		"table") 	wh="$(getconfig parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes)"
 		"table") 	wh="$(getconfig parm_value defaultwhere "${db} ${tb}" | remove_quotes)"
 					tb_get_where $label "$db" "$tb" "$wh" > "$whfile"
 					tb_read_table "$pid" "$label" "$db" "$tb" "$wh"
-#					setconfig   "defaulttable|$label $db|$tb";;
 					setconfig   "defaulttable|$db|$tb";;
 	    "b_utiltb") utils_ctrl "$db" "$tb";;
 		"b_utils")  if [ "$label" = "selectDB" ];then mydb="" ;else mydb="$db"  ;fi
@@ -355,9 +318,7 @@ function tb_ctrl_gui () {
 					if [ "$nwhere" = "" ];then return;fi 
 					sql_execute "$db" "explain select * from $tb $nwhere"
 					if [ "$?" -gt "0" ];then return ;fi
-#					setconfig   "defaultwhere|$label $db $tb|$nwhere" 		
 					setconfig   "defaultwhere|$db $tb|$nwhere" 		
-#					setconfig   "wherelist|$label $db $tb|$nwhere"  
 					setconfig   "wherelist|$db $tb|$nwhere"  
 		            tb_get_where "$label" "$db" "$tb" "$nwhere" > "$whfile" 
 					tb_read_table "$pid" "$label" "$db" "$tb" "$nwhere";;
@@ -377,18 +338,17 @@ function ctrl_start_new_instance () {
 #	rxvt="urxvt -depth 32 -bg [65]#000000 -geometry 40x20"
 	rxvt="urxvt -bg [100]#FFFFDA -geometry 40x20"
 	$rxvt -title "$1" -e $script ${@:2}
-	wmctrl -l | grep "$1" | while read -r window;do wmctrl -a "$window" -b toggle,shaded;done 
+#	wmctrl -l | grep "$1" | while read -r window;do wmctrl -a "$window" -b toggle,shaded;done 
 }
 function tb_get_where () {
 	local label="$1" db="$2" tb="$3" wh="${@:4}"
-#	if [ "$wh" = "" ];then wh=$(getconfig parm_value defaultwhere "${label}_${db}_${tb}" | remove_quotes);fi 
 	if [ "$wh" = "" ];then wh=$(getconfig parm_value defaultwhere "${db} ${tb}" | remove_quotes);fi 
 	if [ "$wh" = "" ];then wh=" ";else echo "$wh";fi
 	echo "" 
 	getconfig parm_value "%wherelist%" "${label}_${db}_${tb}" | remove_quotes | grep -vw "$wh"
 }
 function tb_get_labels() {
-	log debug $FUNCNAME $@  
+	log debug $@  
 	arr="";del="" 
 	while [ "$#" -gt "0" ];do
 		if   [ -f  "$1" ];then
@@ -412,29 +372,31 @@ function tb_get_labels() {
 		fi
 	    shift		
 	done
-	if [ "$noselectDB" != "$true" ];then arr="$arr${del}selectDB##";fi
+	if [ "$selectDB" = "$true" ];then arr="$arr${del}selectDB##";fi
 	echo $arr
 }
 function tb_gui_get_xml() {
-	local label="$1" db="$2" tb="$3" pid="$4"
+	local label="$1" db="$2" tb="$3" pid="$4" header_visible="true"
 	if [ "$label" = "$tb" ]; then
 		tb_meta_info "$db" "$tb"
-		lb=$(echo $GTBNAME | tr '_,' '-|');sensitiveCBOX="false";sensitiveFSELECT="false";sorGTBTYPE=$GTBSORT 
+		lb=$(echo $GTBNAME | tr '_,' '-|');sensitiveCBOX="false";sensitiveFSELECT="false";sortcol=$GTBSORT 
 	else
-		lb=$(copies 30 '|');lb="c1"
+		lb="c1";sortcol="1"
 		for ((ia=2;ia<=$maxcols;ia++)) ;do
 			lb=$lb"|c"$ia
+			sortcol=$sortcol"|0"
 		done
-		sensitiveCBOX="true";ID=0;sensitiveFSELECT="true";sorGTBTYPE="1$(copies 29 '|0')"
+		sensitiveCBOX="true";ID=0;sensitiveFSELECT="true" 
 	fi
     if [ "$label" = "selectDB" ];then 
 		visibleFSELECT="true";utils="utils"
+		if [ "$header" = "$false" ];then header_visible="false"  ;fi
 	else 
 		visibleFSELECT="false";utils="db_utils"
 	fi
 	if [ "$row" != "" ];   		 then row="$(sql_execute $cdb '.header off\nselect count(*) from '$ctb' where rowid < '$row)"  ;fi
 	if [ "$row" != "" ];   		 then selected_row="selected-row=\"$row\"" ;else selected_row=""  ;fi
-	terminal="${tpath}/input_${pid}_${label}_cmd.txt"
+	terminalfile="${tpath}/input_${pid}_${label}_cmd.txt"
 	exportfile="$epath/export_${pid}_${label}.csv"
 	dbfile="${tpath}/input_${pid}_${label}_db.txt"
 	tbfile="${tpath}/input_${pid}_${label}_tb.txt"
@@ -449,8 +411,8 @@ function tb_gui_get_xml() {
 			<input file>"'$filesocket'"</input> 
 			<action type="refresh">DUMMY'$label'</action>
 		</entry>
-		<tree headers_visible="true" hover-selection="false" hover-expand="true" auto-refresh="true" 
-		 exported_column="'$ID'" sort-column="'$ID'" column-sort-function="'$sorGTBTYPE'" '$selected_row'>
+		<tree headers_visible="'$header_visible'" hover-selection="false" hover-expand="true" auto-refresh="true" 
+		 exported_column="'$ID'" sort-column="'$ID'" column-sort-function="'$sortcol'" '$selected_row'>
 			<label>"'$lb'"</label>
 			<variable>TREE'$label'</variable>
 			<input file>"'$exportfile'"</input>			
@@ -511,7 +473,8 @@ function tb_gui_get_xml() {
 			<button>
 				<label>'$utils'</label>
 				<action>'$script' --func tb_ctrl_gui "b_utils	 | '$pid' | '$label' | $ENTRY'$label' | $CBOXTB'$label'"</action>
-			</button>
+			</button>'
+	if [ $terminal -eq $true ];then echo '
 			<button>
 				<label>show terminal</label>
 				<variable>BUTTONSHOW'$label'</variable>
@@ -525,7 +488,8 @@ function tb_gui_get_xml() {
 				<action type="hide">TERMINAL'$label'</action>
 				<action type="show">BUTTONSHOW'$label'</action>
 				<action type="hide">BUTTONHIDE'$label'</action>
-			</button>
+			</button>'
+	fi; echo '
 			<button>
 				<label>clone</label>
 				<variable>BUTTONCLONE'$label'</variable>
@@ -549,20 +513,26 @@ function tb_gui_get_xml() {
 			<button>
 				<label>refresh</label>
 				<variable>BUTTONREAD'$label'</variable>
-				<action>'$script' --func tb_ctrl_gui "b_refresh | '$pid' | '$label' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label'"</action>			
+				<action>'$script' --func tb_ctrl_gui "b_refresh | '$pid' | '$label' | $ENTRY'$label' | $CBOXTB'$label' | $CBOXWH'$label'"</action>'			
+	if [ $terminal -eq $true ];then echo '
+				<action type="clear">TERMINAL'$label'</action> 
+				<action type="refresh">TERMINAL'$label'</action>'
+	fi; echo '			
 			</button>
 			<button>
 				<label>exit</label>
 				<action>'$script' --func tb_ctrl_gui "b_exit 	| '$pid'| '$label' | $ENTRY'$label' | $CBOXTB'$label' | '${wtitle}#${geometryfile}#${geometrylabel}'"</action>			
 				<action type="exit">CLOSE</action>
 			</button>
-		</hbox>
+		</hbox>'
+	if [ $terminal -eq $true ];then echo '
 		<terminal space-expand="false" space-fill="false" text-background-color="#F2F89B" text-foreground-color="#000000" 
 			autorefresh="true" argv0="/bin/bash" visible="false">
 			<variable>TERMINAL'$label'</variable>
 			<height>'$term_heigth'</height>
-			<input file>"'$terminal'"</input>
-		</terminal>
+			<input file>"'$terminalfile'"</input>
+		</terminal>'
+	fi; echo '	
 	</vbox>'
 }  
 function tb_meta_info () {
@@ -577,7 +547,7 @@ function tb_meta_info () {
 	meta_info_file=$(getfilename "$tpath/meta_info" "${tb}" "${db}" ".txt")
 	local ip=-1 ia=-1  pk="-"
 	sql_execute "$db" ".headers off\nPRAGMA table_info($tb)"   > "$meta_info_file"
-	if [ "$?" -gt "0" ];then log "$FUNCNAME error $?: $db" ".headers off\nPRAGMA table_info($tb)";return 1;fi
+	if [ "$?" -gt "0" ];then log "error $?: $db" ".headers off\nPRAGMA table_info($tb)";return 1;fi
 	while read -r line;do
 		GTBMAXCOLS=$(($GTBMAXCOLS+1))
 		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
@@ -621,10 +591,8 @@ function tb_read_table() {
 		xlimit="limit $limit"
 	fi
 	if [ "$export"  = "$true" ];then 
-#		exportpath="$epath/export_${tb}_$(date "+%Y%m%d%H%M").csv"
 		exportpath=$(getfilename "$epath/export" "$tb" $(date "+%Y%m%d%H%M") "$db" ".csv")
 	else 
-#		exportpath="$epath/export_${tb}.csv"
 		exportpath=$(getfilename "$epath/export" "$tb" "$db" ".csv")
 	fi
 	if [ "$label" = "$tb" ];then off="off";else off="on";fi	
@@ -635,17 +603,15 @@ function tb_read_table() {
 	sql_execute $db ".separator |\n.header $off\nselect ${srow} from $tb $where $xlimit;" | tee "$exportpath" >  "$exportfile"
 	error=$(<"$sqlerror")
 	if [ "$error"  != "" ];		then return 1;fi
-#	setconfig   "defaultwhere|$label $db $tb|$where" 
 	setconfig   "defaultwhere|$db $tb|$where" 
 	return 0
 }
 function uid_ctrl () {
-	log debug $FUNCNAME $*
+	log debug $*
 	local row="$1" db="$2" tb="$3"
 	tb_meta_info "$db" "$tb"
 	if [ "$?" -gt "0" ];then setmsg -i "$FUNCNAME\nerror Meta-Info\n$db\n$tb";return ;fi
 	geometrylabel="geometry_uid_$tb"
-#	geometryfile="$tpath/${geometrylabel}.txt"
 	geometryfile=""
     row_change_xml="$tpath/change_row_${tb}.xml"	
     wtitle="dbms-rc-${tb}"
@@ -658,10 +624,13 @@ function uid_ctrl () {
 		echo "</window>" >> "$row_change_xml"
 	fi	
     if [ "$geometry_rc" = "" ];then geometry_rc=$(getconfig "parm_value" "geometry" "$geometrylabel" '800x500+100+200');fi
+ 	log "run    uid dialog $row_change_xml"
  	(erg=$(gtkdialog -f "$row_change_xml" --geometry=$geometry_rc );ctrl_rollback) & 
+	log "exit	uid dialog $row_change_xml"
+
 }
 function uid_ctrl_gui () {
-	log debug $FUNCNAME args: $@
+	log debug args: $@
 	local parms=$*;IFS="|";parm=($parms);unset IFS 
 	local func=$(trim_value ${parm[0]})  db=$(trim_value ${parm[1]})     tb=$(trim_value ${parm[2]}) 
 	local field=$(trim_value ${parm[3]}) key=$(trim_value ${parm[4]})  	 entrys=$(trim_value ${parm[5]})
@@ -703,13 +672,13 @@ function uid_ctrl_gui () {
 		 "button_exit")   	find $tpath -name "*$pid*" -delete
 							save_geometry "$geometry" ;;
 		 "fileselect") 	    sfile=$(getfileselect "rule_selectdb")
-							if [ "$?" -gt "0" ];then log "$FUNCNAME Suche abgebrochen";return  ;fi
+							if [ "$?" -gt "0" ];then log "Suche abgebrochen";return  ;fi
 							echo "$sfile" > $(getfilename "${tpath}/input" "$pid" "$tb" "$field" "$db" ".txt")
 							;;		
 		 "command") 			uid_gui_get_rule "$db" "$tb" "$field"
 							if [ "$?" = "$false" ];then return  ;fi
-							if [ "$ACTION" = "" ];then return  ;fi
-							uid_gui_rules "exe" "action" "$db" "$tb" "$field" "$key" "$entrys" "$pid" "$ACTION";;
+							if [ "$RULES_ACTION" = "" ];then return  ;fi
+							uid_gui_rules "exe" "action" "$db" "$tb" "$field" "$key" "$entrys" "$pid" "$RULES_ACTION";;
 		 *) 				setmsg -i -d --width=400 "func $func nicht bekannt\ndb $db\ntb $tb\nfield $field\nentry $entry"
 	esac
 	if [ "$msg" != "" ];then setmsg -n "$msg"  ;fi
@@ -730,11 +699,10 @@ function uid_ctrl_gui_defaults () {
     done
 }
 function uid_gui_rules () {
-	local mode="$1" tag="$2" db="$3" tb="$4" field="$5" entry="$6" entrys="$7" pid="$8" ACTION=${@:9} 
-	setmsg -i -d --width=600 "$FUNCNAME 0\nACTION $ACTION\nmode $mode\ntag $tag\nftag $ftag\ndb $db\ntb $tb\nfield $field"
+	local mode="$1" tag="$2" db="$3" tb="$4" field="$5" entry="$6" entrys="$7" pid="$8" RULES_ACTION=${@:9} 
 	xparm="$script --func uid_ctrl_gui \"command | $db | $tb | $field | $entry | $entrys | $pid\""
 	local ftag="" label="" icon="" func="" action="" cmd="" arg=""
-	IFS=";";action=($ACTION);unset IFS
+	IFS=";";action=($RULES_ACTION);unset IFS
 	for arg in "${action[@]}" ;do
 		func="${arg%\@*}"
 		cmd="${arg##*\@}"
@@ -754,7 +722,6 @@ function uid_gui_rules () {
 					*)  		echo							"	        	<$tag>$xparm</$tag>"  
 				esac
 			else
-                setmsg -i -d --width=600 "$FUNCNAME 2\nmode $mode\nftag $ftag\ndb $db\ntb $tb\nfield $field"
 				$cmd "| $ftag | $db | $tb | $pid | $field | $entry | $entrys"
 				break  
 			fi
@@ -769,9 +736,6 @@ function uid_gui_get_xml () {
 	rulesfile=$(getfilename "$tpath/rules" "$db" "$tb" ".txt")
 	stmt="select * from $tbrules where rules_db = \"$db\" and rules_tb = \"$tb\" and rules_status < 9"
 	sql_execute "$dbrules" ".mode line\n$stmt" > "$rulesfile"
-	#~ log "$rulesfile"
-	#~ log "sql_execute $dbrules .mode line\n$stmt $rulesfile"
-	#~ setmsg -i "rf: pause"
 	setconfig "defaultrowid|$db $tb $pid|$key"
 	echo '<vbox hscrollbar-policy="1" vscrollbar-policy="1" space-expand="true" scrollable="true">'
 	echo '	<entry width_chars="'$sizeentry'" space-fill="true" visible="false">'
@@ -797,7 +761,7 @@ function uid_gui_get_xml () {
 		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
 		if [ "${name[$ia]}" = "rowid" ];then continue ;fi
 		uid_gui_get_rule "$db" "$tb" "${name[$ia]}"
-		if [ "$?" = "$true" ];then func=$FUNC;visible="false" ;else func="";visible="true";fi
+		if [ "$?" = "$true" ];then func=$RULES_TYPE;visible="false" ;else func="";visible="true";fi
 		echo    '		<hbox>' 
 		entrys="${entrys}${del}"'$entry'"$ia";del="#"
 		if  [ "$func" = "" ] || [ "$func" = "fileselect" ] ; then  					
@@ -809,17 +773,17 @@ function uid_gui_get_xml () {
             echo  	' 			<comboboxtext space-expand="true" space-fill="true" auto-refresh="true">'
 			echo 	' 				<variable>entry'$ia'</variable>'
 			echo    ' 				<input file>"'$(getfilename "${tpath}/input" "$pid" "$tb" "${name[$ia]}" "$db" ".txt")'"</input>' 
-			uid_gui_rules "xml" "action" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$ACTION"
+			uid_gui_rules "xml" "action" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$RULES_ACTION"
 		  	echo  	'			</comboboxtext>'
 		fi
 		if  [ "$func" = "fileselect" ] ; then  
 			echo	'	        <button>'
 			echo	'				<input file stock="gtk-open"></input>'
     		echo	' 				<action>'$script' --func uid_ctrl_gui "fileselect  | '$db '|' $tb '|' ${name[$ia]} '| $entry'$ia' | ' $entrys '|' ${pid}'"</action>'
-			uid_gui_rules "xml" "action" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$ACTION"
+			uid_gui_rules "xml" "action" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$RULES_ACTION"
 			echo	'			</button>'
 		fi
-		uid_gui_rules "xml" "button" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$ACTION"
+		uid_gui_rules "xml" "button" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$RULES_ACTION"
 		echo  	' 			<text width-chars="'$sizetext'" justify="3"><label>'${name[$ia]}' ('${meta[$ia]}')</label></text>'   
 		echo    '		</hbox>' 
 	done
@@ -839,22 +803,21 @@ function uid_gui_get_xml () {
 	echo '</vbox>'  
 }
 function uid_gui_get_rule() {
-	if [ "$norules" = "$true" ];then return 1;fi
+	if [ "$rules" = "$false" ];then return 1;fi
 	local db="$1" tb="$2" field="$3" value="" found=$false
-#	rulesfile=$(getfilename "$tpath/rules" "$db" "$tb" ".txt")
 	while read -r line;do
 		set -- $line;var=$1;shift;shift;value=$*
 		if [ "$value"   =  "$field"  ];then found=$true;fi	
 		if [ "$value"   = "'$field'" ];then found=$true;fi	
 		case $var in
-			rules_type)     FUNC=$value	;;
-			rules_db_ref) 	SDB=$value	;;
+			rules_type)     RULES_TYPE=$value	;;
+			rules_db_ref) 	RULES_DB_REF=$value	;;
 		esac
 		if [ "$found" = "$false" ];then continue  ;fi		
 		case $var in
-			rules_tb_ref) 	STB=$value	;;
-			rules_action) 	SCMD1=$(echo $value | tr '@' '@');ACTION=$SCMD1;LISTE=$SCMD1	;;
-			rules_col_list) SCMD2=$value	;;
+			rules_tb_ref) 	RULES_TB_REF=$value	;;
+			rules_action) 	RULES_ACTION=$(echo $value | tr '@' '@');;
+			rules_col_list) RULES_COL_LIST=$value	;;
 			rules_info)     break	;;
 		esac
 	done < "$rulesfile"
@@ -863,14 +826,16 @@ function uid_gui_get_rule() {
 function utils_ctrl () {
 	local db="$1" tb="$2" func="$3" ifile="$4" drop_list="" height="260"
 	local drop=$false create=$false edit=$false read=$false import=$false check_inuse=$false
-	local dump=$false restore=$false commit=$false rollback=$false errmsg="" 
-	list='import dump restore commit rollback rules'
+	local dump=$false restore=$false commit=$false rollback=$false reload=$false errmsg="" 
+	list='import reload dump restore commit rollback rules'
 	if [ "$tb" = "" ]; then
-		list=$list' drop create(editor) create(gui) modify(editor) modify(gui)';height="390"		
+		list=$list' drop read create(editor) create(gui) modify(editor) modify(gui)';height="390"		
 	fi
+	[ "$ifile" != "" ] && [ -f "$ifile" ] && list="import read reload";height="200"
 	if [ "$func" = "" ];then 
 		func=$(zenity --list --height=$height --column action $list)
 	fi
+	if [ "$func" = "" ];then setmsg -n "abort...nothing to do"; return ;fi
 	if [ "$(echo $func | grep 'rules')"	!= "" ]; 	then 
 		if   [ "$tb" != "" ]; then
 			setconfig "defaultwhere|$dbrules $tbrules|where rules_db = \"$db\" and rules_tb = \"$tb\""
@@ -895,6 +860,7 @@ function utils_ctrl () {
 	elif [ "$(echo $func | grep 'gui')" 	!= "" ]; 	then edit=$true;create=$true;check_inuse=$true						 
 	elif [ "$(echo $func | grep 'read')" 	!= "" ]; 	then read=$true
 	elif [ "$(echo $func | grep 'import')" 	!= "" ]; 	then import=$true 
+	elif [ "$(echo $func | grep 'reload')" 	!= "" ]; 	then reload=$true 
 	elif [ "$(echo $func | grep 'dump')" 	!= "" ]; 	then dump=$true
 	elif [ "$(echo $func | grep 'restore')" != "" ]; 	then restore=$true
 	else	setmsg -i "abort...func not known $func";return
@@ -902,11 +868,13 @@ function utils_ctrl () {
 	if [ "$tb" = "" ] &&  [ "$restore" = "$false" ]; then
 		is_database "$db";if [ "$?" -gt "0" ];then setmsg -n "abort! no database\n$db";return;fi
 		if [ "$import" = "$true" ]; then 
-			tb=$(zenity --list --height=400 --column table 'tmp_import' $(dbms.sh --func tb_get_tables $db))
+			tb=$(zenity --list --height=400 --column table 'tmp_import' 'other' $(dbms.sh --func tb_get_tables $db))
+			if [ "$tb" = "other" ];then tb=$(zenity --entry --text="new table name")  ;fi
 		else
 			tb=$(zenity --list --height=400 --column table              $(dbms.sh --func tb_get_tables $db))
 		fi 
-		if [ "$tb" = "" ]; then setmsg -n "abort 892! no table selected";return;fi
+		if [ "$tb" = "" ]; then setmsg -n "abort! no table selected";return;fi
+		if [ $reload = $true ];then import=$true  ;fi
 	fi 
 	if [ "$check_inuse" = "$true" ];then 
 		find "$tpath" -name "*xx*" -exec  grep "$db" {} \; | grep "$tb" > "$tmpf"
@@ -972,7 +940,8 @@ function utils_ctrl () {
 			ifile=$(getfileselect file_import file_import)
 		fi
 		if [   -f "$ifile" ]; then
-			utils_import "$db" "$tb" "$ifile" "$func" "$separator" > $readfile
+			set -x
+			utils_import "$db" "$tb" "$ifile" "$separator"  > $readfile
 		else 
 			errmsg="cancel...no file selected"
 		fi
@@ -1016,8 +985,7 @@ function utils_ctrl () {
 		sql_execute "$db" "drop table if exists ${tb}_dump;" 
 		if [ "$?" -gt 0 ];then return;fi
 		setmsg -n --width=600 "succes: $func $tb from $ifile"
-		uid_sql_execute_sync "restore" "$db" "$tb"
-		return
+		ctrl_uid_sync "restore";return
 	elif [ "$commit" 	= "$true" ]; then
 		rm "${tpath}/dump*";return
 	elif [ "$rollback" 	= "$true" ]; then
@@ -1039,14 +1007,23 @@ function utils_ctrl () {
 		setmsg -q "$tb loeschen?" 
 		if [ "$?" = "0" ];then sql_execute $db "drop table if exists $tb;";fi
 	done	 
-	uid_sql_execute_sync
+	ctrl_uid_sync
 }
 function utils_import () {
-	local db="$1" tb="$2" file="$3" func="$4" delim="$5" nheader=""
-	if [ "$delim" = "" ];then delim=$(getconfig "parm_value" "config" "separator" ",");fi
-	delim=$(zenity --entry --text="enter column-separator " --entry-text="$delim")
-	if [ "${#delim}" -ne "1" ];then errmsg="no separator";return 1;fi
-	hl=$(head $file -n 1 | tr [:upper:] [:lower:])
+	local db="$1" tb="$2" file="$3" delim="$4" func="" nheader="" l1 l2
+	hl=$(head $file -n 1 | tr [:upper:] [:lower:]) 	
+	if [ "${#delim}" -eq 1 ];then
+		l1=${#hl}
+		l2=$(echo $hl | tr -d "$delim" | wc -m)
+		l2=$(($l2-1))
+		if [ $l1 -le $l2 ];then delim=""  ;fi
+	fi
+	if [ "$delim" = "" ];then  
+		delim=$(zenity --entry --text="enter column-separator " --entry-text="$separator")
+	fi
+	if [ ${#delim} -ne 1 ];then errmsg="no separator: $delim";return 1;fi
+	stmt="update $tbparm set parm_value = \"$delim\" where parm_type = 'config' and parm_field = 'separator'"
+	sql_execute "$dbparm" "$stmt" # delim '|' normaliy reserved
 	echo ".separator $delim"				 
 	is_table "$db" "$tb";istable=$?
 	if [ "$istable" = "$false" ]; then
@@ -1063,7 +1040,7 @@ function utils_import () {
 		echo ".import \"$file\" $tb"				 
 		return 0
 	fi
-	local tbcopy="$2_tmp" 
+	local tbcopy="${tb}_tmp" 
 	tb_meta_info "$db" "$tb"
 	il=$(echo $GTBSELECT | tr ',' "$delim" | tr [:upper:] [:lower:])
 	rl=$(echo $GTBNAME   | tr ',' "$delim" | tr [:upper:] [:lower:]) 
@@ -1082,11 +1059,6 @@ function utils_import () {
 	elif [ "$zhl"    = "$zrl" ];   	then func="update";nheader="$rl"  
 	else errmsg="cannot handle $file";return 1				 
 	fi
-	#~ local dfile=$(getfilename "${tpath}/dump" "$tb" "$db" ".sql") 
-	#~ if  [ ! -f "$dfile" ];then 
-		#~ echo ".once $dfile"
-		#~ echo ".dump $tb"
-	#~ fi
 	if [ "$nheader" != "" ]; then
 		echo "--need file with exact header! new file: $tmpf"  
 		echo "$nheader" > "$tmpf" 
@@ -1099,29 +1071,45 @@ function utils_import () {
 	fi
 	echo "	drop table if exists $tbcopy;"	 
 	echo ".import \"$file\" $tbcopy"			 
-	echo ".separator ,"				 
 	if  [ "$func"   = "insert" ]; 	then
 		msg="insert to $tb $file "
 		echo "	insert into $tb ($GTBSELECT)"	 
 		echo "	select $GTBSELECT from $tbcopy;"			 
 	else
+	    echo "pragma foreign_keys=OFF;"
 		line="";del=""
 		for ((ia=0;ia<${#arl[@]};ia++)) ;do
 			line="${line}${del}b.${arl[$ia]}";del=","
 		done
 		msg="insert/update to $tb $file "	 
+		echo "--  update"
 		echo "	insert or replace into $tb"		 
 		echo "	select $line"					 
 		echo "	from $tbcopy as b join $tb as a on b.$PRIMKEY = a.$PRIMKEY;"	 
-		echo "--  "								 
+		echo "--  insert primary key with value"
 		echo "	insert into $tb as a  " 		 
+		echo "	select $line" 					 
+		echo "	from $tbcopy as b"				 
+		echo "	where  b.${PRIMKEY} is not null"		 
+		echo "	and    b.${PRIMKEY} not in ('null','')"		 
+		echo "	and    b.${PRIMKEY} in ("		 
+		echo "	select a.${PRIMKEY} from $tbcopy as a "	 
+		echo "	left join $tb as b  "			 
+		echo "	on a.${PRIMKEY} = b.${PRIMKEY}"	 
+		echo "	where b.${PRIMKEY} is null);"	 	 
+		echo "--  insert primary key has no value"
+		line="";del=""
+		for ((ia=0;ia<${#ail[@]};ia++)) ;do
+			line="${line}${del}b.${ail[$ia]}";del=","
+		done								 
+		echo "	insert into $tb as a ($GTBSELECT) " 		 
 		echo "	select $line" 					 
 		echo "	from $tbcopy as b"				 
 		echo "	where b.${PRIMKEY} in ("		 
 		echo "	select  a.${PRIMKEY} from $tbcopy as a "	 
 		echo "	left join $tb as b  "			 
 		echo "	on a.${PRIMKEY} = b.${PRIMKEY}"	 
-		echo "	where b.${PRIMKEY} is null);"	 
+		echo "	where b.${PRIMKEY} is null);"
 	fi
 	echo     "	drop table if exists $tbcopy;"	
 }
@@ -1145,7 +1133,6 @@ function utils_modify_create () {
 	echo "insert into $tbcreate (pos,field,type,nullable,default_value,primary_key) values"  
 	tb_meta_info "$db" "$tb"  
 	while read -r line;do
-#	    log "$line"
 	    IFS=",";fields=( $line );unset IFS;nline="";del=""
 	    for ((ia=0;ia<${#fields[@]};ia++)) ;do
 			arr=${fields[$ia]}
@@ -1156,7 +1143,6 @@ function utils_modify_create () {
 				*)  	nop
 			esac
 			arr=$(echo $arr | tr -d '"' )
-#			nline="$nline$del\"$(remove_quotes $arr)\"";del=","
 			nline="$nline$del\"$arr\"";del=","
 		done
 		echo "${delim}(${nline})"  
@@ -1199,7 +1185,6 @@ function utils_modify_create () {
 		if [ "$b" = "(" ];then ic=$(($ic+1));found=$false;fi
 		if [ "$b" = ")" ];then ic=$(($ic-1));fi 
 		if [ "$b" = ")" ] && [ "$ic" -eq 0 ];then
-#			check=$(echo $check | tr "'" '"')
 			if [ "$field" = "check" ];then 
 				echo "	  insert into $tbcreate (field,check_const,pos) values (\"check$((icheck++))\",\"${check:1}\",\"$((maxpos + $icheck))\");"    
 			else 
@@ -1267,16 +1252,15 @@ function rules_receive_parm () {
 	IFS="#";value=($parm);unset IFS
   	for ((ia=0;ia<${#name[@]};ia++)) ;do
 		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
-#		arg=$(echo ${value[$iv]} | tr  ',' ' ' | tr -d '"')
 		arg=$(echo ${value[$iv]} | tr  ',' ',' | tr -d '"')
 		iv=$((iv+1))
 		if [ "$arg" = "" ];    			then nparm=$nparm$del$arg;del="#";continue;fi
 		if [ "$arg" = "null" ];			then nparm=$nparm$del$arg;del="#";continue;fi
 		uid_gui_get_rule "$db" "$tb" "${name[$ia]}"
 		if [ "$?" = "$false" ];			then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$SCMD2" = "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$SCMD2" = "" ]; 			then SCMD2=0;fi
-		IFS=",";range=($SCMD2);unset IFS
+		if [ "$RULES_COL_LIST" = "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$RULES_COL_LIST" = "" ]; 			then RULES_COL_LIST=0;fi
+		IFS=",";range=($RULES_COL_LIST);unset IFS
 		IFS=", ";avalue=($arg);unset IFS
 		vparm="";del2=""
 		for arg in ${range[@]}; do vparm=$vparm$del2${avalue[$arg]};del2=" ";done
@@ -1285,8 +1269,8 @@ function rules_receive_parm () {
 	echo $nparm
 }
 function uid_read_tb () {
-	local debug func="$1" db="$2" tb="$3" pid="$4" PRIMKEY="$5" rowid="$6" file="" sel=""
-	log debug "$FUNCNAME $db $tb $pid $PRIMKEY $rowid "
+	local func="$1" db="$2" tb="$3" pid="$4" PRIMKEY="$5" rowid="$6" file="" sel=""
+	log debug "$db $tb $pid $PRIMKEY $rowid "
 	if [ "$func" = "clear" ]; then 
 		uid_ctrl_gui_defaults > "$tmpf"
 	else
@@ -1303,27 +1287,26 @@ function uid_read_tb () {
 		echo "$value" > "$file"
 		uid_gui_get_rule "$db" "$tb" "$field";	
 		if 	 [ "$?" = "$false" ] ;then  continue ;fi
-		if 	 [ "$FUNC" = "reference" ]; then
-			SCMD1=$(echo "$SCMD1" | tr ';' ' ')
-			sql_execute "$SDB" "$SCMD1  = \"$value\"" 	>  "$file"		# show first db value
-			sql_execute "$SDB" "$SCMD1 != \"$value\"" 	>> "$file"		# than others
-		elif [ "$FUNC" = "fileselect" ]; then
+		if 	 [ "$RULES_TYPE" = "reference" ]; then
+			RULES_ACTION=$(echo "$RULES_ACTION" | tr ';' ' ')
+			sql_execute "$RULES_DB_REF" "$RULES_ACTION  = \"$value\"" 	>  "$file"		# show value fom db first
+			sql_execute "$RULES_DB_REF" "$RULES_ACTION != \"$value\"" 	>> "$file"		# than others
+		elif [ "$RULES_TYPE" = "fileselect" ]; then
 			continue
-		elif [ "$FUNC" = "table" ]; then
-			sql_execute "$SDB" "$SCMD1  = \"$value\"" 	> "$file"		# nur aktuellen wert als erstes anzeigen
-		elif [ "$FUNC" = "liste" ]; then
-			if [ -f "$LISTE" ]; then
-				readarray  aliste < "$LISTE"
+		elif [ "$RULES_TYPE" = "table" ]; then
+			sql_execute "$RULES_DB_REF" "$RULES_ACTION  = \"$value\"" 	> "$file"		# show value fom db first
+		elif [ "$RULES_TYPE" = "liste" ]; then
+			if [ -f "$RULES_ACTION" ]; then
+				readarray  aliste < "$RULES_ACTION"
 			else								
-				IFS='#,@,|'; aliste=($LISTE);unset IFS
+				IFS='#,@,|'; aliste=($RULES_ACTION);unset IFS
 			fi
 			lng=${#field}
 			for arg in "${aliste[@]}" ;do if [ "$value"  = "${arg:0:$lng}" ];then echo $arg;break ;fi;done > "$file"
 			for arg in "${aliste[@]}" ;do if [ "$value" != "${arg:0:$lng}" ];then echo $arg		  ;fi;done >>  "$file"
-		elif [ "$FUNC" = "command" ]; then 
-			setmsg -i -d --width=600 "$FUNCNAME command\nexe\ninput\n$db\n$tb\n$pid\n$field\n$value"
-			uid_gui_rules "exe" "input" "$db" "$tb" "$field" "$value" "$entrys" "$pid" "$ACTION" > "$file"
-		else setmsg -i "$FUNCNAME type not known $FUNC"
+		elif [ "$RULES_TYPE" = "command" ]; then 
+			uid_gui_rules "exe" "input" "$db" "$tb" "$field" "$value" "$entrys" "$pid" "$RULES_ACTION" > "$file"
+		else setmsg -i "$FUNCNAME type not known $RULES_TYPE"
 		fi 						
 	done  < "$tmpf" 
 	if [ "$ffound" = "$true" ];then return ;fi
@@ -1335,7 +1318,7 @@ function uid_read_tb () {
 	echo $(getconfig parm_value defaultrowid "${db}_${tb}_${pid}") > "$file"
 }
 function uid_sql_execute () {
-	log  debug $FUNCNAME $@
+	log  debug $@
 	local db="$1" tb="$2" mode="$3" PRIMKEY="$4" row="$5" pid="$6" parm=${@:7}
 	if [ "$row" = "" ];then row=$(getconfig parm_value defaultrowid "${db}_${tb}_${pid}");fi
 	tb_meta_info $db $tb $row $(rules_receive_parm "$db" "$tb" "$parm")
@@ -1359,7 +1342,6 @@ function uid_sql_execute () {
 		 "gt")		nkey=$(sql_execute "$db" ".header off\nselect $PRIMKEY from $tb where $PRIMKEY > $row order by $PRIMKEY      limit 1");;
 		 "delete")	sql_execute "$db" "delete from $tb where $PRIMKEY = $row " ;;
 		 "update")	nkey=$row;sql_execute "$db" "$GTBUPDATE" ;;
-#		 "insert")	nkey=$(sql_execute "$db" "${GTBINSERT};select last_insert_rowid()")
  		 "insert")	sql_execute "$db" "${GTBINSERT}";;
 		  *)  		nop
 	esac
@@ -1382,7 +1364,7 @@ function uid_sql_execute () {
 	case "$mode" in "eq"|"lt"|"gt")	return;; esac
 	msg="succes $mode $PRIMKEY = $row"
 }
-function uid_sql_execute_sync () {
+function ctrl_uid_sync () {
 	echo $(date "+%Y_%m_%d_%H_%M_%S_%N") > "$filesocket" 
 }
 function getfilename () {
@@ -1479,16 +1461,6 @@ function terminal_cmd () {
 	echo "sqlite3 $db" 			>> "$termfile"  
 }
 function remove_quotes () { quote --remove $* | tr -s '"' ; }
-function x_read_csv () {
-	local file=$*;[ ! -f "$file" ] && setmsg -w --width=400 "kein file $file" && return
-	sql_execute $dbparm "drop table if exists tmpcsv;"
-	sql_execute $dbparm ".import $file tmpcsv"
-	noselectDB="$true";tb_ctrl $dbparm tmpcsv 
-	gtkdialog  -f "$dfile"
-	setmsg -q "speichern ?"
-	if [ "$?" -gt "0" ];then return;fi
-	sql_execute $dbparm "select * from tmpcsv" > "$file"
-}
 function rules_command () {
 	pparm=$*;IFS="|";parm=($pparm);unset IFS  
 	local func=$(trim_value ${parm[0]})  mode=$(trim_value ${parm[1]})
@@ -1538,6 +1510,142 @@ function rules_command_list_fields () {
 	setmsg -i -d "$FUNCNAME\ndb $db\ntb $tb\nfield $field"
 	if [ "$field" != "" ]; then echo "$field";else field=" ";fi
     sql_execute "$db" "pragma table_info($tb)"  | cut -d ',' -f2  | grep -v "$field" 
+}
+function log () { 
+	[  $# 	-eq 0  ]    	&&	return;	
+	[ ""	= "$logfile"  ] && 	logfile="${path}/log.txt" 	&& touch $logfile
+	[ "$1"  = "logon"  ]    && 	echo " " >> "$logfile"
+	[ "$1"  = "logon"  ]    && 	log "start " $script  		&& log ${@:2} 	&& return
+	[ "$1" 	= "logoff" ]    && 	log "stop  " $script  		  				&& return
+	[ "$1" 	= "file" ]    	&& 	logfile="$2" 				&& log ${@:3}	&& return
+	[ "$1" 	= "new" ]    	&& 	rm $logfile 				&& log ${@:2}	&& return
+	[ "$1" 	= "tlog" ]    	&& 	tlog 						&& log ${@:2}	&& return
+	[ "$1" 	= "debug"  ]    && [ "$debug" != "$true" ]   	   				&& return
+	[ "$1" 	= "debug_on" ] 	&& [ "$debug"  = "$true" ] 		&& log ${@:2}	&& return
+	[ "$1" 	= "debug_off" ] && [ "$debug"  = "$false" ] 	&& log ${@:2}	&& return
+	[ "$1" 	= "debug"  ] 	&& shift;
+	[ "$1"  = "-" 	   ]    && setmsg  ${@:2}													&& return
+	printf "%s %-20s %s" "$(date +"%y-%m-%d-%T:%N")" "${FUNCNAME[1]}" >> "$logfile";
+	echo -e $* >> "$logfile"
+}
+function tlog () {
+	local file=$@; if [ "$file" = "" ];then file=$logfile ;fi
+	if [ "$(ps -F -C tail | grep "$file")" != "" ];then  return;fi # laeuft schon
+	urxvt --geometry 100X15 --background "#F4FAB4" --foreground black --title "tlog: $file"  -e tail -f -n+1  $file &
+}
+function sql_execute () {
+	set -o noglob 
+	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
+	local db="$1";shift;stmt="$@"
+	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
+	error=$(<"$sqlerror")
+	if [ "$error"  = "" ];then return 0;fi
+	log $FUNCNAME $stmt
+	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
+	return 1
+}
+function pos () {
+	local str pos x
+	if [ "${#1}" -gt "${#2}" ] ; then
+	   str="$1";pos="$2"
+	else  
+	   str="$2";pos="$1"
+	fi 
+    x="${str%%$pos*}"
+    [[ "$x" = "$str" ]] && echo -1 || echo "${#x}"
+}
+function setmsg () {
+	oldstate="$(set +o | grep xtrace)";set +x
+	local parm="--notification";local text=""
+	log debug $*
+	while [ "$#" -gt "0" ];do
+		case "$1" in
+		"--width"*)				parm="$parm ""$1"		;;
+		"-w"|"--warning") 		parm="--warning"		;;
+		"-e"|"--error")   		parm="--error"			;;
+		"-i"|"--info")    		parm="--info" 		 	;;
+		"-n"|"--notification")  parm="--notification"	;;
+		"-q"|"--question")	    parm="--question"		;;
+		"-d"|"--debug")	        if [  $debug -eq $false ];then  return  ;fi		;;
+		"-*" )	   				parm="$parm ""$1"		;;
+		*)						text="$text ""$1"		;;
+		esac
+		shift
+	done
+	text=$(echo $text | tr '"<>' '_' | tr "'" '_')
+	if [ "$text" != "" ];then text="--text='$text'" ;fi
+	eval "$oldstate"
+	eval 'zenity' $parm $text 
+	return $?
+}
+function quote () {
+    local line="" ql='"' qr='"' i=0 gap="" file="" x=0 delimiter="," remove=$false
+    while [ $# -gt 0 ] ;do
+		if [ "$(echo $1 | grep -e '^-[a-z].')" ]; then # zB -avcb
+			nparm=$(func_mygetopt $1)
+			shift; set -- $@ $nparm
+		else
+			case "$1" in
+				"--quote-left"|"--ql"|"-l")    shift;ql="$1";;
+				"--quote-right"|"--qr"|"-r")   shift;qr="$1";;
+				"--quote-char"|"--qc"|"-c")    shift;ql="$1";qr="$1";;
+				"--delimiter"|"--dl"|"-d")     shift;delimiter="$1";;
+				"--remove"|"-r")    		   remove="$true";;
+				"--text"|"-t")                 shift;line="$line$ql$1$qr";;
+				"--help"|"-h")                 func_help $FUNCNAME;return;;
+				"--debug"|"-x")                set -x;x=1;;
+			#	[-]*)                          func_help $FUNCNAME "$1";return;;
+				*)  if [ "$file" == "" ]; then file=$1; fi
+					line="$line$gap$1"
+					gap=" "
+			esac
+			shift
+		fi
+    done
+    lql=${#ql};lqr=${#qr}
+    if [ "$line" != "" ]  ; then 
+		echo "$line" 
+    elif [ -f "$file" ] ;then
+        cat "$file"
+    else
+        cat < /dev/stdin
+    fi |
+    while read -r line;do
+		IFS="$delimiter";arr=($line);unset IFS;del="";erg="" 
+		for arg in "${arr[@]}"; do
+			while true;do		#	remove quotes
+				lng=${#arg}
+				if [ "$lng" -gt "$lql" ] && [ "${arg:0:$lql}" = "$ql" ]; then 
+					arg="${arg:$lql}" 
+					lng="${#arg}"
+	                if [ "${arg:$lng-$lqr:$lqr}" = "$qr" ];  then arg="${arg:0:$lng-$lqr}";fi
+	            else    	
+					break;
+			    fi
+			done	  
+			if [ "$remove" = "$true" ];then 
+				erg=$erg$del$arg 
+			else
+				erg=$erg$del$ql$arg$qr
+			fi
+			del=$delimiter
+		done
+        echo $erg
+    done      
+}
+function save_geometry (){
+	str=$*;IFS='#';local arr=( $str );unset IFS; local window=${arr[0]} gfile=${arr[1]} glabel=${arr[2]}
+	XWININFO=$(xwininfo -stats -name "$window")
+	if [ "$?" -ne "0" ];then func_setmsg -i "error XWINFO";return  ;fi
+	HEIGHT=$(echo "$XWININFO" | grep 'Height:' | awk '{print $2}')
+	WIDTH=$(echo "$XWININFO" | grep 'Width:' | awk '{print $2}')
+	X1=$(echo "$XWININFO" | grep 'Absolute upper-left X' | awk '{print $4}')
+	Y1=$(echo "$XWININFO" | grep 'Absolute upper-left Y' | awk '{print $4}')
+	X2=$(echo "$XWININFO" | grep 'Relative upper-left X' | awk '{print $4}')
+	Y2=$(echo "$XWININFO" | grep 'Relative upper-left Y' | awk '{print $4}')
+	X=$(($X1-$X2))
+	Y=$(($Y1-$Y2))
+	setconfig "geometry|$glabel|${WIDTH}x${HEIGHT}+${X}+${Y}"
 }
 function zz () { return; } 
 	ctrl $*
