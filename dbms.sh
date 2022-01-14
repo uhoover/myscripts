@@ -91,19 +91,6 @@ function ctrl () {
 	    shift
 	done
 	log logon
-	name="uwe"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="dani"
-	name="uwe"
-
-	return
 	tb_ctrl $myparm	
 }
 function ctrl_systb_rules() {
