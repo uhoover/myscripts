@@ -13,7 +13,7 @@ function ftest () {
 	return
 }
 function ctrl () {
-	declare true=0 false=1 debug=1
+	declare true=0 false=1 debug=1 trapoff=1
 	alias log='log $LINENO'
 	folder="$(basename $0)";path="$HOME/.${folder%%\.*}"
 	tpath="/tmp/.${folder%%\.*}";xpath="$path/xml" 
@@ -64,7 +64,9 @@ function ctrl () {
 	log tlog    
 	declare -g	GTBNAME="" 	 GTBTYPE=""   GTBNOTN="" GTBDFLT="" GTBPKEY="" GTBMETA="" GTBSELECT="" GTBINSERT="" 
 	declare -g  GTBUPDATE="" GTBUPSTMT="" GTBSORT="" GTBMAXCOLS=-1
+	name="start"
 	while [ "$#" -gt 0 ];do
+		echo "tf $trapfield tv $trapval cv $compare_value"
 		case "$1" in
 	        "--tlog"|-t|--show-log-with-tail)  			log tlog ;;
 	        "--debug"|-d)  				                log debug_on ;;
@@ -80,13 +82,28 @@ function ctrl () {
 	        "--geometry_rc"|--grc|--HEIGHTxWIDTH+X+Y)	shift;geometry_rc="$1" ;;
 	        "--help"|-h)								func_help $FUNCNAME;echo -e "\n     usage [ dbname [table ] --all  ]" ;return;;
 	        "--all"|--tab-each-table)					myparm="$myparm $1";;
-	        "--trap_at"|--trap_at_line)					shift;trap 'set +x;trap_at $LINENO $1;set -x' DEBUG;shift;;
+	        "--trap_at"|--trap_at_line)					shift;trapfield="$1";             trap 'set +x;trap_at     $LINENO $trapfield           ;set -x' DEBUG;shift;;
+	        "--trap_when"|--trap_field_value_equal)	    shift;trapfield="$1";trapval="$2";trap 'set +x;trap_when   $LINENO $trapfield $trapval  ;set -x' DEBUG;shift;shift;;
+	        "--trap_change"|--trap_field_value_change)	shift;trapfield="$1";trapval="$2";trap 'set +x;trap_change $LINENO $trapfield ;set -x' DEBUG;shift;shift;;
 	        -*)   										func_help $FUNCNAME;return;;
 	        *)    										myparm="$myparm $1";;
 	    esac
 	    shift
 	done
 	log logon
+	name="uwe"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="dani"
+	name="uwe"
+
+	return
 	tb_ctrl $myparm	
 }
 function ctrl_systb_rules() {
@@ -1647,6 +1664,34 @@ function save_geometry (){
 	Y=$(($Y1-$Y2))
 	setconfig "geometry|$glabel|${WIDTH}x${HEIGHT}+${X}+${Y}"
 }
+function trap_help () {
+    echo "debug at     LINENO         : trap 'set +x;trap_at     $LINENO  174;         set +x' DEBUG"
+    echo "debug when   field eq  value: trap 'set -x;trap_when   $LINENO $field value ;set +x' DEBUG"
+    echo "debug change field new value: trap 'set +x;trap_change $LINENO $field;       set +x' DEBUG"
+}
+function trap_off()    { set +x;trapoff=$true; }
+function trap_at() 	   { lineno=$1;trap_while "$1:at lineno >= $2" "$true"  "lineno" "$2" ; }
+function trap_when()   { 		   trap_while "$1:when $2 = $3"      "$true"  "$2"     "$3"; } 
+function trap_change() {   		   trap_while "$1:change $2 $compare_value to $(eval 'echo $'$2)" "$false" "$2"     "$compare_value"; } 
+function trap_while()  {
+    local msg="$1" eq="$2" field="$3" value=""
+    eval 'value=$'$field 
+	[ $eq -eq $true  ] && [ "$value" != "$compare_value" ] && return
+	[ $eq -eq $false ] && [ "$value"  = "$compare_value" ] && return
+	if [ $trapoff -eq  $true ]; then  return; fi  
+	compare_value="$value"
+	msg="$msg:${BASH_COMMAND} --> " 
+	while true ; do
+		[ $trapoff -eq  $true ] && break  
+		read -u 4 -p "$msg " cmd
+		[ "$cmd" = "" ] && break      
+		case $cmd in
+				vars ) ( set -o posix ; set );;
+				ende ) ;;
+				* ) eval $cmd;;
+		esac
+	done
+}
 function zz () { return; } 
 	ctrl $*
-	exit
+
