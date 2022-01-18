@@ -16,10 +16,12 @@ function _ctrl () {
 		func="record"
 	fi
 	case "$func" in 
-		 "cronjob")  create_cronjob  $@;;
-		 "delete")   delete_cronjob  $@;;
-	 	 "record")   record_channel  $@;;
-		 "playlist") create_playlist	$@;;
+		 "cronjob")  		create_cronjob  $@;;
+		 "create_cronjob")  create_cronjob  $@;;
+		 "delete")   		delete_cronjob  $@;;
+		 "delete_cronjob")  delete_cronjob  $@;;
+	 	 "record")   		record_channel  $@;;
+		 "playlist") 		create_playlist $@;;
 		 *) log "parameter unbekannt $func"; 
 	esac
 }
