@@ -378,15 +378,14 @@ function uid_ctrl () {
  	(erg=$(gtkdialog -f "$row_change_xml" --geometry=$geometry_rc );ctrl_rollback;find $tpath -name "*$pid*" -delete;log "end  uid dialog $row_change_xml $pid") & 
 }
 function uid_ctrl_gui () {
-	log debug args: $@
+	log debug $@
 	local parms=$*;IFS="|";parm=($parms);unset IFS 
 	local func=$(trim_value ${parm[0]})  db=$(trim_value ${parm[1]})     tb=$(trim_value ${parm[2]}) 
 	local field=$(trim_value ${parm[3]}) key=$(trim_value ${parm[4]})  	 entrys=$(trim_value ${parm[5]})
-	local pid=$(trim_value ${parm[6]})   geometry=$(trim_value ${parm[7]})
-	local msg="" mode="normal"
+	local pid=$(trim_value ${parm[6]})   geometry=$(trim_value ${parm[7]}) 
+	local msg="" mode="normal" xlabel=$geometry
 	tb_meta_info $db $tb "$entrys"
 	if [ "$?" -gt 0 ];then func="button_clear"; setmsg -n "no table $tb in $db";fi 
-
 	if [ "$field" = "unknown" ];then field="$PRIMKEY";fi
 	file=$(getfilename "${tpath}/input" "$pid" "$tb" "$field" "$db" ".txt")
 	rulesfile=$(getfilename "$tpath/rules" "$db" "$tb" ".txt")
@@ -404,8 +403,8 @@ function uid_ctrl_gui () {
 							if [ $? -gt 0 ];then return;fi 
 							;;
 		 "button_update")   uid_sql_execute "$db" "$tb" "update" "$field" "$key" "$pid" "$entrys" ;;
-		 "button_delete")   setmsg -q "$field=$key wirklich loeschen ?"
-							if [ $? -gt 0 ];then setmsg "-w" "Vorgang abgebrochen";return  ;fi
+		 "button_delete")   setmsg -q "$field=$key delete ?"
+							if [ $? -gt 0 ];then return  ;fi
 							uid_sql_execute "$db" "$tb" "delete" "$field" "$key" "$pid" 
 							if [ $? -gt 0 ];then return  ;fi
 							if [ "$pid" != " " ];then
@@ -414,16 +413,16 @@ function uid_ctrl_gui () {
 							fi
 							;;
 		 "button_clear")   	uid_read_tb "clear" "$db" "$tb" "$pid" "$PRIMKEY" "$key" ;;
-		 "button_refresh")  uid_read_tb "read" "$db" "$tb" "$pid" "$PRIMKEY" "$key" ;;
+		 "button_refresh")  uid_read_tb "read"  "$db" "$tb" "$pid" "$PRIMKEY" "$key" ;;
 		 "button_exit")   	save_geometry "$geometry" ;;
-		 "fileselect") 	    sfile=$(getfileselect "rule_selectdb")
+		 "fileselect") 	    sfile=$(getfileselect "$key")
 							if [ "$?" -gt "0" ];then log "Suche abgebrochen";return  ;fi
 							echo "$sfile" > $(getfilename "${tpath}/input" "$pid" "$tb" "$field" "$db" ".txt")
 							;;		
 		 "command") 		uid_gui_get_rule "$db" "$tb" "$field"
 							if [ "$?" = "$false" ];then return  ;fi
 							if [ "$RULES_ACTION" = "" ];then return  ;fi
-							uid_gui_rules "exe" "action" "$db" "$tb" "$field" "$key" "$entrys" "$pid" "$RULES_ACTION";;
+							uid_gui_rules "exe" "action" "$db" "$tb" "$field" "$key" "$entrys" "$pid" "$xlabel" "$RULES_ACTION";;
 		 *) 				setmsg -i -d --width=400 "func $func nicht bekannt\ndb $db\ntb $tb\nfield $field\nentry $entry"
 	esac
 	if [ "$msg" != "" ];then setmsg -n "$msg"  ;fi
@@ -444,29 +443,33 @@ function uid_ctrl_gui_defaults () {
     done
 }
 function uid_gui_rules () {
-	local mode="$1" tag="$2" db="$3" tb="$4" field="$5" entry="$6" entrys="$7" pid="$8" RULES_ACTION=${@:9} 
+	local mode="$1" tag="$2" db="$3" tb="$4" field="$5" entry="$6" entrys="$7" pid="$8" xlabel="$9" RULES_ACTION=${@:10} 
 	xparm="$script --func uid_ctrl_gui \"command | $db | $tb | $field | $entry | $entrys | $pid\""
 	local ftag="" label="" icon="" func="" action="" cmd="" arg=""
+	if [ "$RULES_ACTION" = "" ];then RULES_ACTION=$xlabel ;fi
 	IFS=";";action=($RULES_ACTION);unset IFS
+	if [ "$tag" = "input" ];then echo "$entry" > $(getfilename "${tpath}/input" "$pid" "$tb" "$field" "$db" ".txt");fi
 	for arg in "${action[@]}" ;do
 		func="${arg%\@*}"
 		cmd="${arg##*\@}"
 		for ftag in ${func//@/ };do 
-		    set -- ${ftag//#/ }
+		    set -- ${ftag//&/ }
 		    ftag="$1";label="$2";icon="$3"
-			if [ "$ftag" != "$tag" ];then continue  ;fi
-			if [ "$mode"  = "xml" ];then 
+		    if [ "$mode" != "xml" ]   && [ "$ftag" = "button" ]; then ftag="action";fi  # button has only action method
+			if [ "$ftag" != "$tag" ]; then continue    ;fi
+			if [ "$mode"  = "xml" ];  then 
 				case "$tag" in
-					"button") 	echo							"	        <button>"
-								if [ "$label" != "" ];then echo	"	        	<label>$label<label>"  ;fi
-								if [ "$icon"  != "" ];then echo	"	        	<input file stock=\"$icon\"></input>"  ;fi
-								echo							"	        	<action>$xparm</action>"  
-								echo							"	        </button>"  
+					"button") 	echo							"		<button>"
+								if [ "$label" != "" ];then echo	"			<label>$label</label>"  ;fi
+								if [ "$icon"  != "" ];then echo	"			<input file stock=\"$icon\"></input>"  ;fi
+								xparm="$script --func uid_ctrl_gui \"command | $db | $tb | $field | $entry | $entrys | $pid | $label\""
+								echo							"			<action>$xparm</action>"  
+								echo							"		</button>"  
 							;;
-					*)  		echo							"	        	<$tag>$xparm</$tag>"  
+					*)  		echo							"		<$tag>$xparm</$tag>"  
 				esac
 			else
-				$cmd "| $ftag | $db | $tb | $pid | $field | $entry | $entrys"
+				$cmd "| $ftag | $db | $tb | $pid | $xlabel | $field | $entry | $entrys"
 				break  
 			fi
 		done
@@ -474,7 +477,7 @@ function uid_gui_rules () {
 }
 function uid_gui_get_rule() {
 	if [ "$rules" = "$false" ];then return 1;fi
-	local db="$1" tb="$2" field="$3" value="" found=$false
+	local db="$1" tb="$2" field="$3" value="" found=$false 
 	while read -r line;do
 		set -- $line;var=$1;shift;shift;value=$*
 		if [ "$value"   =  "$field"  ];then found=$true;fi	
@@ -491,6 +494,11 @@ function uid_gui_get_rule() {
 			rules_info)     break	;;
 		esac
 	done < "$rulesfile"
+	if [ "$RULES_TYPE" = "blob" ]; then
+		RULES_ACTION="button&show@/home/uwe/my_scripts/dbms.sh --func rules_command blobshow;button&store@/home/uwe/my_scripts/dbms.sh --func rules_command blobstore;"
+		RULES_TYPE="command"
+		RULES_TYPE_O="blob"
+	fi
 	return $found
 }
 function utils_ctrl () {
@@ -905,19 +913,24 @@ function utils_modify_script () {
 	GTBSELECT=$(sql_execute "$dbcreate" "select field_old from $tbcreate where field != '$PRIMARYKEY' and field not like 'check%' order by pos" | fmt -w 500 | tr ' ' ',' | tr -d '"')
 }
 function rules_receive_parm () {
-	local db="$1" tb="$2" parm=${@:3} nparm="" vparm="" del="" del2="" value="" avlue="" iv=0
+	local db="$1" tb="$2" parm=${@:3} nparm="" vparm="" del="" del2="" value="" avlue="" iv=-1
 	IFS=",";name=($GTBNAME);unset IFS
+	log parm $parm
 	IFS="#";value=($parm);unset IFS
+	log $(declare -p name)
+	log $(declare -p value)
   	for ((ia=0;ia<${#name[@]};ia++)) ;do
-		if [ "${name[$ia]}" = "$PRIMKEY" ];then continue ;fi
-		arg=$(echo ${value[$iv]} | tr  ',' ',' | tr -d '"')
+		if [ "${name[$ia]}"  = "$PRIMKEY" ];	then continue ;fi
 		iv=$((iv+1))
-		if [ "$arg" = "" ];    			then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$arg" = "null" ];			then nparm=$nparm$del$arg;del="#";continue;fi
+		arg=$(echo "${value[$iv]}" | tr  ',' ',' | tr -d '"')
 		uid_gui_get_rule "$db" "$tb" "${name[$ia]}"
-		if [ "$?" = "$false" ];			then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$RULES_COL_LIST" = "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
-		if [ "$RULES_COL_LIST" = "" ]; 			then RULES_COL_LIST=0;fi
+		if [ "$?" = "$false" ];					then nparm=$nparm$del$arg;del="#";continue;fi
+		log ${name[$ia]} ">>$arg<<" $PRIMKEY $RULES_TYPE_O
+		if [ "$RULES_TYPE_O" = "blob" ];		then nparm=$nparm$del$(echo ${name[$ia]} | tr -d '"');del="#";continue;fi
+		if [ "$arg" = "" ];    					then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$arg" = "null" ];					then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$RULES_COL_LIST" 	= "all" ];		then nparm=$nparm$del$arg;del="#";continue;fi
+		if [ "$RULES_COL_LIST" 	= "" ]; 		then RULES_COL_LIST=0;fi
 		IFS=",";range=($RULES_COL_LIST);unset IFS
 		IFS=", ";avalue=($arg);unset IFS
 		vparm="";del2=""
@@ -963,7 +976,7 @@ function uid_read_tb () {
 			for arg in "${aliste[@]}" ;do if [ "$value"  = "${arg:0:$lng}" ];then echo $arg;break ;fi;done > "$file"
 			for arg in "${aliste[@]}" ;do if [ "$value" != "${arg:0:$lng}" ];then echo $arg		  ;fi;done >>  "$file"
 		elif [ "$RULES_TYPE" = "command" ]; then 
-			uid_gui_rules "exe" "input" "$db" "$tb" "$field" "$value" "$entrys" "$pid" "$RULES_ACTION" > "$file"
+			uid_gui_rules "exe" "input" "$db" "$tb" "$field" "$value" "$entrys" "$pid" "none" "$RULES_ACTION" > "$file"
 		else setmsg -i "$FUNCNAME type not known $RULES_TYPE"
 		fi 						
 	done  < "$tmpf" 
@@ -1037,7 +1050,7 @@ function getfileselect () {
 	local type="searchpath" field="$1" save="${@:2}" mydb="" db="" path=""
 	if [ "$field" = "--save" ];then save=$field ;field=""  ;fi
 	if [ -f  "$field" ]; then
-		path=$field;field=""
+		path="$field";field=""
 	else
 	    path=$(getconfig "parm_value" "$type" "$field")
 	fi
@@ -1123,10 +1136,11 @@ function rules_command () {
 	pparm=$*;IFS="|";parm=($pparm);unset IFS  
 	local func=$(trim_value ${parm[0]})  mode=$(trim_value ${parm[1]})
 	local db=$(trim_value ${parm[2]})    tb=$(trim_value ${parm[3]}) 
-	local pid=$(trim_value ${parm[4]})   field=$(trim_value ${parm[5]}) 
-	local value=$(trim_value ${parm[6]}) entrys=$(trim_value ${parm[7]})
+	local pid=$(trim_value ${parm[4]})   xlabel=$(trim_value ${parm[5]}) field=$(trim_value ${parm[6]}) 
+	local value=$(trim_value ${parm[7]}) entrys=$(trim_value ${parm[8]})
 	IFS="#";arr=($entrys);unset IFS
-	if [ "$func" = "rules" ]; then
+	case "$func" in
+	rules)
 		case "$field" in
 			"rules_db"|"rules_tb"|"rules_field")	dbfile=$(getfilename "${tpath}/input" "$pid" "$tb" "rules_db"      "$db" ".txt")
 													tbfile=$(getfilename "${tpath}/input" "$pid" "$tb" "rules_tb"      "$db" ".txt")	
@@ -1142,12 +1156,12 @@ function rules_command () {
 		case "$mode"  in
 			 "input") 
 						case "$field" in
-							"rules_field")			rules_command_list_fields "${arr[3]}" "${arr[4]}" "${arr[5]}";;
-							"rules_tb")				tb_get_tables	  "${arr[3]}" "${arr[4]}";; 
-							"rules_tb_ref")			tb_get_tables	  "${arr[6]}" "${arr[7]}";; 
-							"foreign_table")	    tb_get_tables     "$db"       "${arr[9]}";; 
-							"foreign_field")		tb=$(head -n 1 $tbfile) 
-													rules_command_list_fields "${db}" "${tb}" "${arr[10]}";;
+							 "rules_field")			rules_command_list_fields 	"${arr[3]}" "${arr[4]}" "${arr[6]}";;
+							 "rules_tb")			tb_get_tables	 			"${arr[3]}" "${arr[4]}";; 
+							 "rules_tb_ref")		tb_get_tables	  			"${arr[7]}" "${arr[8]}";; 
+							 "foreign_table")	    tb_get_tables     			"$db"       "${arr[10]}";; 
+							 "foreign_field")		tb=$(head -n 1 $tbfile) 
+													rules_command_list_fields 	"${db}" "${tb}" "${arr[11]}";;
 							*) :
 						esac;;
 			 "action") 	case "$field" in
@@ -1159,7 +1173,34 @@ function rules_command () {
 						esac;;
 			 *) :
 		esac
-	fi
+		;;
+	play)
+		[ ! -f "$value" ] && return
+		[ -d "$value" ] && xine "$value" && return
+		type=${value##*\.}
+		case "$type" in
+			mp3|ogg) xine "$value";;
+			*) xdg-open "$value"
+		esac
+		;;
+	blob*)
+		tb_meta_info "$db" $tb
+		key=$(head -n 1 $(getfilename "${tpath}/input" "$pid" "$tb" "$PRIMKEY" "$db" ".txt"))
+		if [ "$func" = "blobshow" ] && [ "$xlabel" = "show" ];then 
+			file=$(getfilename "${tpath}/blob" "$pid" "$tb" "rules_db" "$db")
+			sql_execute "$db" "select writefile('$file',$field) from $tb where $PRIMKEY = $key"
+			[ $? -gt 0 ] && return 
+			$FUNCNAME  "play | $mode | $db | $tb | $pid | none | $field |$file" &
+		fi
+		if [ "$func" = "blobstore" ] && [ "$xlabel" = "store" ];then 
+			file=$(getfileselect "searchblobfile")
+			[ $? -gt 0 ] && return
+			sql_execute "$db" "update $tb set $field = readfile('$file') where $PRIMKEY = $key"
+			[ $? -eq 0 ] && setmsg -n "success update blob $file" && ctrl_uid_sync
+		fi
+		;;
+	*)	setmsg -w "$FUNCNAME\nfunction not known\n$func"
+	esac
 }
 function rules_command_list_fields () {
 	local db="$1" tb="$2" field="$3"
@@ -1587,8 +1628,12 @@ cat <<EOF
 				</button>
 EOF
 		fi
+		if  [ "$func" != "" ] ; then
 cat <<EOF  
 		$(uid_gui_rules "xml" "button" "$db" "$tb" "${name[$ia]}" "\$entry${ia}" "$entrys" "$pid" "$RULES_ACTION")
+EOF
+		fi
+cat <<EOF 
 				<text width-chars="$sizetext" justify="3"><label>${name[$ia]} (${meta[$ia]})</label></text>   
 			</hbox> 
 EOF
