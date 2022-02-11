@@ -8,7 +8,7 @@
 	fileurl="$HOME/my_scripts/resources/url_list.txt"
 	fileparm="$HOME/tmp/parmfile.txt"
 	pathvideo="$HOME/Videos";[ ! -d $pathvideo ] && mkdir $pathvideo
-	pathmusic="$HOME/Musik"; [ ! -d $pathmusic ] && mkdir $pathmusic
+	pathmusic="$HOME/Musik/radioripps"; [ ! -d $pathmusic ] && mkdir $pathmusic
 function _ctrl () {
 	if [ $# -gt 0 ];then 
 		func=$1;shift
