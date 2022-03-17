@@ -174,7 +174,7 @@ function reverse () {
 }	
 function func_is_digit () {
 	if [ "$1" == "" ]; then echo 1;return;fi
-    test -z "${@//[0-9]}" && echo 0 || echo 1
+    test -z "${@//[0-9\.\,]}" && return $true || return $false
 }
 function isdigit () { func_is_digit "$@"; }
 function func_print_script() {

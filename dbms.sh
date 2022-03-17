@@ -340,8 +340,7 @@ function tb_read_table() {
 	strdb=$(echo $db | tr '/ ' '_');exportfile="$epath/export_${tb}_${strdb}.csv";exportfile="$epath/export_${pid}_${label}.csv"
 	tb_meta_info "$db" $tb
 	if [ "$?" -gt 0 ];then echo "" > "$exportfile"; setmsg -n "no table $tb in $db";return  ;fi 
-#	if [ "$where" != "" ] || [ $(pos limit "where") -gt -1 ]; then
-	if [ $(pos limit "$where") -gt -1 ]; then
+	if [ $(pos limit "     $where") -gt -1 ]; then
 		xlimit="" 
 	else
 		xlimit="limit $limit"
@@ -1452,6 +1451,7 @@ function y_get_xml_tb () {
 				<variable>CBOXTB$label</variable>
 				<sensitive>$sensitiveCBOX</sensitive>
 				<input file>"$tbfile"</input>			
+#				<action type="clear">TREE$label</action>			
 				<action>$script --func tb_ctrl_gui "table    | $pid | $label | \$ENTRY$label | \$CBOXTB$label"</action>
 			</comboboxtext>	
 			<button>

@@ -1,19 +1,30 @@
 #!/bin/bash
 #
 	source /home/uwe/my_scripts/my_functions.sh
+	set -o noglob
 #
+function _ctrl () {
 	echo $$ >/tmp/script_pid.tmp
 	[ ! -d $HOME/tmp ] && mkdir $HOME/tmp
+	folder="${0##*\/}"
+	mypath="/tmp/.${folder%%\.*}"
 	crontab="$HOME/tmp/crontab.txt"
 	fileurl="$HOME/my_scripts/resources/url_list.txt"
 	fileparm="$HOME/tmp/parmfile.txt"
 	pathvideo="$HOME/Videos";[ ! -d $pathvideo ] && mkdir $pathvideo
 	pathmusic="$HOME/Musik/radioripps"; [ ! -d $pathmusic ] && mkdir $pathmusic
-function _ctrl () {
-	if [ $# -gt 0 ];then 
-		func=$1;shift
+	urlliste="${mypath}/url_list.txt"
+	fileurl="$urlliste"
+    tvliste="${mypath}/tv_channels_list.xspf"
+    radioliste="${mypath}/radio_channels_list.xspf"
+    [ ! -d $mypath ] && mkdir $mypath && set -- create_playlist
+#    create_playlist;exit
+#    cron_get_url "Das Erste (ARD)"
+#    cat "$fileparm";exit
+	if [ $# -eq 0 ];then 
+		func=$(zenity --list --column 'action' 'create_cronjob' 'delete_cronjob' 'record' 'create_playlist')
 	else
-		func="record"
+		func=$1;shift
 	fi
 	case "$func" in 
 		 "cronjob")  		create_cronjob  $@;;
@@ -22,6 +33,7 @@ function _ctrl () {
 		 "delete_cronjob")  delete_cronjob  $@;;
 	 	 "record")   		record_channel  $@;;
 		 "playlist") 		create_playlist $@;;
+		 "create_playlist") create_playlist $@;;
 		 *) log "parameter unbekannt $func"; 
 	esac
 }
@@ -97,6 +109,7 @@ function create_cronjob () {
 	#cronjob {channel_name}#{title}#{start_year}-{start_month}-{start_day}#{start_hour}:{start_minute}#{length_minutes}#{url}
 	log "create cronjob $@" 
 	cmd=$(cron_cmd create $@)
+	log $cmd
 	set -o noglob
 	crontab -l  >  $crontab
 	echo "$cmd" >> $crontab
@@ -114,16 +127,19 @@ function delete_cronjob () {
 	echo "cronjob(s) geloescht mit $title"
 }
 function record_channel () {
+    set -x
 	if [ $# -lt 1 ];then 
 		set -- "https://das.erste" "/tmp/daserste.mp4" "30"
 	fi
 	log "record stream start $1 $2 $3"
-	file=$2;first=${file%\.*};last=${file##*\.};file="${first}_$(date +%Y_%m_%d_%H_%M).$last"
-	ffmpeg -hide_banner -re -i "$1" -codec: copy "$file" 2> /dev/null &
+	file="$2";first=${file%\.*};last=${file##*\.};file="${first}_$(date +%Y_%m_%d_%H_%M).$last"
+#	ffmpeg -hide_banner -re -i "$1" -codec: copy "$file" 2> /dev/null &
+    ffmpeg -hide_banner -re -i "$1" -codec: copy "$file"  &
 	lrc=$!
 	tsleep=$3;tsleep=$(($tsleep*60))
 	sleep $tsleep
 	kill -TERM $lrc	 
+    set +x
 	log "record strean end"
 }
 function pl_write_liste () {
@@ -138,47 +154,57 @@ function pl_write_head () {
 }    
 function pl_write_bottom () {
 	pl_write_liste '	</trackList>'
-	pl_write_liste '	<extension application="http://www.videolan.org/vlc/playlist/0">'
-	for ((i=0;i<=$id;i++));do
-		pl_write_liste '		<vlc:item tid="'$i'"/>'
-	done
-	pl_write_liste '	</extension>'
+	#~ pl_write_liste '	<extension application="http://www.videolan.org/vlc/playlist/0">'
+	#~ for ((i=0;i<=$id;i++));do
+		#~ pl_write_liste '		<vlc:item tid="'$i'"/>'
+	#~ done
+	#~ pl_write_liste '	</extension>'
 	pl_write_liste '</playlist>'
 }    
 function pl_write_track () {
 	id=$(($id+1))
 	if [ "$channel" != "" ]; then ntitle="$channel $title";else ntitle=$title;fi
-	ntitle=$(echo "${ntitle//\&quot\;}" | tr -d '"')
+	ntitle=$(echo "${ntitle//\&quot\;}" | tr -d '"\Ⓖ\Ⓢ')
+	[ "$(echo $ntitle | grep '48 kbit')" != "" ] && return
+	[ "$(echo $ntitle | grep '96 kbit')" != "" ] && return
+	[ "$(echo $ntitle | grep '24 kbit')" != "" ] && return
 	nurl="${url%\?*}"
 	nurl=${nurl//\&quot\;}
 	pl_write_liste '		<track>'
 	pl_write_liste '			<location>'$nurl'</location>'
 	pl_write_liste '			<title>'$ntitle'</title>'
 	if [ "$image" != "" ]; then pl_write_liste '			<image>'${image//\&quot\;}'</image>';fi
-	pl_write_liste '			<extension application="http://www.videolan.org/vlc/playlist/0">'
-	pl_write_liste '				<vlc:id>'$id'</vlc:id>'
-	pl_write_liste '				<vlc:option>network-caching=1000</vlc:option>'
-	pl_write_liste '			</extension>'
+	#~ pl_write_liste '			<extension application="http://www.videolan.org/vlc/playlist/0">'
+	#~ pl_write_liste '				<vlc:id>'$id'</vlc:id>'
+	#~ pl_write_liste '				<vlc:option>network-caching=1000</vlc:option>'
+	#~ pl_write_liste '			</extension>'
 	pl_write_liste '		</track>'
 	if [ "$channel" != "" ]; then ntitle=$channel;else ntitle=$title;fi
 	stitle=$(_short_name $ntitle)
 	echo "$stitle # $ntitle # $nurl # $ftype" >> $urlliste
 } 
 function pl_tv () {
-	_curl_liste "$tfile" "https://github.com/Free-IPTV/Countries/blob/master/DE01_GERMANY.m3u"
+#	_curl_liste "$tfile" "https://github.com/Free-IPTV/Countries/blob/master/DE01_GERMANY.m3u"
+    _curl_liste "$tfile" "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8"
 	playliste=$tvliste
 	[ -f $playliste ] && rm $playliste
-	channel=""
+	channel="";found=$false
     pl_write_head tv
-    grep 'js-file-line' $tfile |
+#   grep 'js-file-line' $tfile |
+	curl "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8" 2> /dev/null |
 	while read -r line; do
+		line=$(echo $line | tr -d 'Ⓢ' | tr -d 'Ⓖ')
 		str=${line#*\>}
 		line=${str%*\<*} 
+        if [ "${line:0:7}" = "#EXTINF" ]; then
+            echo $line | grep -iq germany 
+            [ $? -eq $true ] && found=$true || found=$false
+        fi
+        [ $found -eq $false ] && continue
 		if [ "${line:0:7}" = "#EXTINF" ]; then
-			str=${line#*=}
-			title=${str%% tvg-id*}
-			str=${line#*tvg-logo=}
-			image=${str%% group-title*}
+			str=$(echo $str | cut -d '"' --output-delimiter='|' -f2,4) 
+			title=${str%%\|*}
+			image=${str##*\|}
 		fi
 		if [ "${line:0:4}" != "http" ]; then continue;fi
 		url=$line
@@ -209,12 +235,13 @@ function pl_radio_wdr () {
 	done
 }
 function pl_radio_dlf () {
-	playliste=$radioliste2
+	playliste=$radioliste
 	if [ $id -lt 0 ];then
 	    [ -f $playliste ] && rm $playliste
 	    pl_write_head radio
 	fi
-	site="https://www.deutschlandradio.de/unsere-streaming-adressen-im-einzelnen.3236.de.html"
+#	site="https://www.deutschlandradio.de/unsere-streaming-adressen-im-einzelnen.3236.de.html"
+	site="https://www.deutschlandradio.de/streamingdienste.3236.de.html"
 	_curl_liste "$tfile" "$site"
 	grep '<p class=' "$tfile" |
 	while read -r erg;do
@@ -227,8 +254,6 @@ function pl_radio_dlf () {
 		lineold=$line
 		channel=${line%%block*}
 		if [ "$image" != "" ];then image=$(echo "https://www.deutschlandradio.de/${line#*img src=}" | tr -d '"');fi
-		echo "channel: $channel"
-		echo "image:   $image"
 		while true;do
 			erg=${erg#*<a href=}
 			line=${erg%%<\/a>*}
@@ -240,34 +265,47 @@ function pl_radio_dlf () {
 			if [ "${url:0:4}" != "http" ]; then continue;fi
 			title=${line#*title=}
 			title=${title%% target=*}
+			title=${title%%\>*}
 			pl_write_track
 		done
 	done
 } 
 function pl_radio_rest () {
-	playliste=$radioliste3
+	playliste=$radioliste
 	if [ $id -lt 0 ];then
 	    [ -f $playliste ] && rm $playliste
 	    pl_write_head radio
 	fi
     image="";title="kriola";url="http://stream.laut.fm/kriola.m3u";pl_write_track	 
 } 
+function pl_xine () {
+	while read -r line;do
+		str=${line#*<};tag=${str%%\>*}
+		str2=${str#*>};url=${str2%%\<*}
+		case "$tag" in
+			  track)	echo "entry {" ;;
+			  title)	str3="	identifier = $url"  ;;
+			  location)	echo "$str3;"
+						echo "	mrl = $url;"  ;;
+			  /track)	echo "};" ;;
+			*) :
+		esac
+	done < "$*"
+
+}
 function create_playlist () {
 	log "create playlist $@" 
-	mypath=$HOME'/.config/vlc/'
-	mypath=$HOME'/tmp/'
     za=-1;id=-1
-    urlliste="${mypath}url_list.txt"
-    tvliste="${mypath}tv_channels_list.xspf"
-    radioliste="${mypath}radio_channels_list.xspf"
-    radioliste2="${mypath}radio_channels_list2.xspf"
-    radioliste3="${mypath}radio_channels_list3.xspf"
-    tfile=$HOME'/tmp/curl.http'
-	ofile=$HOME'/tmp/curl.txt'
+    radioliste2="${mypath}/radio_channels_list2.xspf"
+    radioliste3="${mypath}/radio_channels_list3.xspf"
+    tfile="${mypath}/curl.http"
+	ofile="${mypath}/curl.txt"
 	[ -f $urlliste ] && rm $urlliste
 #   id=-1;pl_radio_dlf;pl_write_bottom 
 	id=-1;pl_radio_wdr;pl_radio_dlf;pl_radio_rest;pl_write_bottom
     id=-1;pl_tv
+    pl_xine "$tvliste" > "${mypath}/tv_channels_list.tox" 
+	pl_xine "$radioliste" > "${mypath}/radio_channels_list.tox" 
 }
 function xexit () {
 	exit
