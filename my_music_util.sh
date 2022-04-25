@@ -17,9 +17,12 @@ function _exit () {
 	headfile="$path/taghead.txt"
 #	sqlpath="/home/uwe/db/sql/music/"; [ ! -d "sqlpath" ] && mkdir -p "$sqlpath"
 	sqlpath="$tpath/sql/"; [ ! -d "sqlpath" ] && mkdir -p "$sqlpath"
-	tmpf="/tmp/tmp.txt"
+	tmpf="/$tpath/tmp.txt"
+	readfile="/$tpath/read.txt"
 #	db="/home/uwe/my_databases/music_test.sqlite"
 	db="$tpath/music.sqlite"
+	parmfile="/tmp/parmfile.txt"
+    echo 'pdb="'$db'"' > "$parmfile" 
 	importtb="import"
 #
 function _amain () {
@@ -40,64 +43,99 @@ function _amain () {
 	    shift
 	done
  	log logon 
-# 	ftest 
+# 	ftest2;return 
 # 	mypath="/media/uwe/media/Musik/radioripps"
 # 	read_path_to_import $mypath
-# 	check_tb
+ 	[ -f "$db" ] && rm -r "$db"
+ 	check_tb
   	import_tags
 }
 function ftest () {
-#	mypath="/media/uwe/media/Musik/radioripps"
-	title="filename nb_streams nb_programs format_name format_long_name start_time duration size bit_rate probe_score encoder \
-title artist album track tracktotal genre composer date comment url"
-	IFS=" ";arr=($title);unset IFS  
-    echo "id $title" | tr ' ' '|'  > "$tagfile"
-    start=$false
-	(find "$mypath" -type f -print0 | xargs -0 -i -n 1 echo \"{}\" | grep ".mp3\|.ogg\|.wav" | grep -v ".lnk"  | 
-		xargs -i -n 1 ffprobe -hide_banner -show_format -print_format flat "{}" 2>&1 ) | grep -v 'format.tag' | grep '^    \|^format.'|
-		while IFS=':=' read field value;do 
-			field=$(echo "$field" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
-			value=$(echo $value | tr -d '"')
-			test -z "${value//[0-9\.\,]}"; [ $? -eq $false ] && value="\"$value\""
-			case "$field" in
-				streamtitle)		field="title";;  
-				icy-name)			field="artist";; 		
-				icy-description)	field="comment";; 			
-				icy-genre)			field="genre";; 			
-				icy-url)			field="url";; 		
-				*) :
-			esac
-			field="${field##*\.}"
- 			#~ [ "$field" = "title" ] 	 && start=$true
- 			#~ [ "$field" = "comment" ] && start=$true
- 			#~ [ $start -eq $false ]  && continue
-			for ((ia=0;ia<${#arr[@]};ia++)) ;do
-				[ "$field" = "${arr[$ia]}" ] &&  val[$ia]="$value" && break
-			done
-			case "$field" in
-				probe_score) 	# start=$false
-								if 	[ "${val[0]}" != "" ]; then
-									[ "$zi" = "" ] && zi=1 || : $((zi++))
-									[ $((zi%100)) -eq 0 ] && echo "verarbeite $zi"
-									line="$zi" 
-									for ((ia=0;ia<${#arr[@]};ia++)) ;do
-										line="${line}|${val[$ia]}"
-										val[$ia]=""
-									done
-									echo $line  >> "$tagfile"
-								fi;;
-			esac
-		done
-		return
-	(find "$mypath" -type f -print0 | xargs -0 -i -n 1 echo \"{}\" | grep ".mp3\|.ogg\|.wav" | grep -v ".lnk"  | 
-		xargs -i -n 1 ffprobe -hide_banner -show_format -print_format flat "{}" 2>&1 | 
-		grep 'format.\|^      ') | while read l;do echo $l;done
+	
+		cat << EOF
+--  album from filename		
+	select  replace(a.filename,replace(a.filename, rtrim(a.filename, replace(a.filename, '/', '')), ''),'') from import a where album = '';
+ 
+	                               replace(filename, '/', '')   from import where title like 'www.%';
+--  title from filename		
+	select                                replace(filename, '/', '')   from import where title like 'www.%';
+	select                 rtrim(filename,replace(filename, '/', ''))  from import where title like 'www.%';
+	select  replace(filename,rtrim(filename,replace(filename, '/', '')),'')  from import where title like 'www.%';
+	select  replace(a.filename,replace(a.filename, rtrim(a.filename, replace(a.filename, '/', '')), ''),'') from import a where rowid < 10;
+	update import 
+	set    title = (select  replace(filename,rtrim(filename,replace(filename, '/', '')),''))
+	where  filename like '%rollende%'; 
+
+--	track nr
+	
+    SELECT  distinct
+		a.id
+	   ,a.album
+	   ,a.title
+       ,replace(a.filename, rtrim(a.filename, replace(a.filename, '/', '')), '')
+       ,(
+		select count(*) + 1
+		from  (select distinct b.title 
+			   from   import b 
+			   where b.filename < a.filename and 
+                     replace(a.filename,replace(a.filename, rtrim(a.filename, replace(a.filename, '/', '')), ''),'') = 
+                     replace(b.filename,replace(b.filename, rtrim(b.filename, replace(b.filename, '/', '')), ''),'')  
+             )
+	   )
+    from import a
+	where
+--		a.filename like '%lords %'
+		a.track = ''
+	order by a.album,a.title
+	;
+	
+    SELECT  distinct
+		a.track_album
+	   ,a.track_title
+       ,replace(a.track_filename, rtrim(a.track_filename, replace(a.track_filename, '/', '')), '')
+       ,(
+		select count(*) + 1
+		from  (select distinct b.track_title 
+			   from   track b 
+			   where a.track_album = b.track_album and b.track_title < a.track_title and 
+                     replace(a.track_filename,replace(a.track_filename, rtrim(a.track_filename, replace(a.track_filename, '/', '')), ''),'') = 
+                     replace(b.track_filename,replace(b.track_filename, rtrim(b.track_filename, replace(b.track_filename, '/', '')), ''),'')  
+             )
+	   )
+    from track a
+	where
+		a.track_filename like '%lords %'
+	order by a.track_album,a.track_title
+	;
+	
+	
+	select track_album,track_title,(select count(*) from track  b where track_album = a.track_album and track_title < a.track_title and track_filename like '%lords %') from track a where track_filename like '%lords %' order by track_album,track_title;
+	select track_album,track_title,(select count(*) from track  b where track_album = a.track_album and track_title < a.track_title and track_filename like '%lords %' group by b.track_album) from track a where track_filename like '%lords %' order by track_album,track_title;
+	select track_album,track_title,(select track_album,count(*) from track b where a.track_album = b.track_album and b.track_title < a.track_title and b.track_filename like '%lord%' group by b.track_album) from track a where a.track_filename like '%lord%';
+	
+	select a.track_album,a.track_title,a.track_nr,nr from track a left join (select count(*) as nr from track b where a.track_title < b.track_title) on a.track_album = b.track_album where track_filename like '%lord%';
+
+EOF
 }
 function ftest2 () {
-	field=$(echo $1  | tr -d '":' | tr [:upper:] [:lower:]);shift
-	[ "$field" = "{" ] && echo start && return
-	[ "$field" = "}" ] && echo end   && return
-	printf '%-20s %s\n' "$field" "$*"
+	cat << EOF > $tmpf
+.headers off
+	select 
+		album_id
+	   ,album
+	   ,title
+	   ,(
+	    select count(*) from import b
+	    where 	rtrim(b.filename,replace(b.filename, '/', '')) = rtrim(a.filename,replace(a.filename, '/', ''))
+	    )
+	from import a
+	where tracktotal = "";    
+EOF
+	sql_execute "$db" ".read $tmpf" |
+	while IFS=',' read  id album title nr;do
+		echo "$id $album $title $nr;"
+#		echo "update import set track = $nr where id = $id;"
+	done
 }
 function ftest3 () {
 #	cat << EOF | while IFS= read -r l;do  ftest2 "$l";done
@@ -131,7 +169,7 @@ Input #0, ogg, from '/media/uwe/daten/music/Harfe/Deilmann, Uta/Harfenklaenge/8 
 EOF
 }
 function check_tb () {
-	for tb in album artgrp artist catalog composer genre genrelist import instrument instrumentation title track; do
+	for tb in album artgrp artist catalog composer genre genrelist instrument instrumentation title track; do
 		echo $tb
 		file="${sqlpath}/create_table_${tb}.sql"
 		[ -f $file ] && rm "$file"
@@ -142,16 +180,19 @@ function check_tb () {
 	done
 }
 function import_tags () {
- 
+    sql_execute "$db" "drop table if exists import"
+#    head -n 10 "$tagfile";return
 	is_table "$db" "import"
 	[ $? -eq $false ] && [ -f "$tagfile" ] && sql_execute "$db" ".separator |\n.import $tagfile import"
-	sql_import | grep -v '#' > "$tmpf"
-	sql_execute "$db" ".read $tmpf"
-	return
+	sql_import | grep -v '#' > "$readfile"
+	setmsg -i "$LINENO $FUNCNAME pause"
+	sql_execute "$db" ".read $readfile"
 	timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+	    #~ title="filename nb_streams nb_programs format_name format_long_name start_time duration size bit_rate probe_score encoder \
+#~ title artist album track tracktotal genre composer date comment url"
 	sql="insert into  track select \
-	        null,null,tags_album,null,tags_title,null,tags_composer,null,tags_artist, \
-            null,tags_genre,null,tags_date,duration,size,format_name,format_long_name, \
+	        null,null,album,null,title,null,track,tracktotal,composer,null,artist, \
+            null,genre,null,date,comment,duration,size,format_name,format_long_name, \
             filename,nb_streams,nb_programs,start_time,bit_rate, \
             probe_score,\"$timestamp\",null \
          from import;"
@@ -477,10 +518,53 @@ function sql_import () {
 	update import set album = 'Lords and Ladies CD2' where album = '' and filename like '%pratchett%' and filename like '%ladies%' and filename like '%cd2%'; 
 	update import set album = 'Lords and Ladies CD3' where album = '' and filename like '%pratchett%' and filename like '%ladies%' and filename like '%cd3%'; 
 	update import set album = 'Lords and Ladies CD4' where album = '' and filename like '%pratchett%' and filename like '%ladies%' and filename like '%cd4%'; 
+	update import 
+		set    title = (select  replace(filename,rtrim(filename,replace(filename, '/', '')),''))
+		where  title = ''; 
+#	update import  
+#		set   track =  (select count(*) + 1
+#						from   (select distinct b.title 
+#								from   import b 
+#								where b.filename < filename and 
+#									replace(  filename,replace(  filename, rtrim(  filename, replace(  filename, '/', '')), ''),'') = 
+#									replace(b.filename,replace(b.filename, rtrim(b.filename, replace(b.filename, '/', '')), ''),'')  
+#								)
+#						)
+#		where track = '';
 	#select replace(filename, rtrim(filename, replace(filename, '/', '')), '') from import where title = "" and filename like '%pratchett%';
 	#select replace(fls_track_filename, rtrim(fls_track_filename, replace(fls_track_filename, '/', '')), '') from track where track_id < 10;
 	#select replace(filename, rtrim(filename, replace(filename, '/', '')), '') from import where title = "" and filename like '%pratchett%';
 EOF
+	sql_execute "$db" ".headers off\nselect id,filename from import where album = ''" |
+	while IFS=',' read  id file;do
+		IFS='/';arr=($file);ix=${#arr[@]};album=${arr[$ix-2]};unset IFS
+		echo "update import set album = \"$album\" where id = $id ;"
+	done
+	cat << EOF > $tpath/readfile2.sql
+.headers off
+	    SELECT  distinct
+		a.id
+       ,(
+		select count(*) + 1
+		from  (select distinct b.title 
+			   from   import b 
+			   where b.filename < a.filename and 
+                     replace(a.filename,replace(a.filename, rtrim(a.filename, replace(a.filename, '/', '')), ''),'') = 
+                     replace(b.filename,replace(b.filename, rtrim(b.filename, replace(b.filename, '/', '')), ''),'')  
+             )
+	    )
+	   ,a.album
+	   ,a.title
+       ,replace(a.filename, rtrim(a.filename, replace(a.filename, '/', '')), '')
+    from import a
+	where
+ 		a.track = ""
+	order by a.album,a.title;
+EOF
+	sql_execute "$db" ".read $tpath/readfile2.sql" |
+	while IFS=',' read  id nr rest;do
+		echo "update import set track = $nr where id = $id;"
+	done
 }
 function y_get_create_stmt () {
 	eval 'y_get_create_tb_'$* ' | grep -v "#"'
@@ -489,14 +573,16 @@ function y_get_create_tb_album () {
 	cat << EOF
 	CREATE TABLE album(
 	  "album_id" 					INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
-	  "album_name"					TEXT UNIQUE,
+	  "album_name"					TEXT,
 	  "album_track_id"				INTEGER,
 	  "album_opus_nr"				TEXT,
 	  "album_catalog_id"			INTEGER,
 	  "album_instrumentation_id"	INTEGER,
 	  "album_tracks"				INTEGER,
+	  "album_path"				    TEXT,
 	  "album_info"					TEXT
 	);
+	create unique index ix_u_1_album on album(album_path,album_name);
 EOF
 }
 function y_get_create_tb_artgrp () {
@@ -975,6 +1061,7 @@ function y_get_create_tb_track () {
   "track_genre"					TEXT,
   "track_genre_id"				INTEGER,
   "track_date"					TEXT,
+  "track_comment"				TEXT,
   "track_duration"				TEXT,
   "track_size"					TEXT,
   "track_format_name"			TEXT,
@@ -995,17 +1082,17 @@ function y_get_create_tb_track () {
 CREATE TRIGGER track_after_insert 
    AFTER INSERT ON track
 BEGIN
-	INSERT OR IGNORE INTO album (album_name,album_tracks,album_track_id) VALUES (new.track_album,new.track_nr_total,new.track_id);
+	INSERT OR IGNORE INTO album (album_id,album_name,album_tracks,album_track_id,album_path) VALUES ((select max(album_id) + 1 from album),new.track_album,new.track_nr_total,new.track_id,rtrim(new.track_filename,replace(new.track_filename, '/', '')));
     UPDATE track set track_album_id = (select album_id from album where album_name = new.track_album) where track_id = new.track_id;
-	INSERT OR IGNORE INTO title (title_name,title_name_new,title_track_nr) VALUES (new.track_title,new.track_title,new.track_nr);
+	INSERT OR IGNORE INTO title (title_id,title_name,title_name_new,title_track_nr) VALUES ((select max(title_id) + 1 from title),new.track_title,new.track_title,new.track_nr);
     UPDATE track set track_title_id = (select title_id from title where title_name = new.track_title) where track_id = new.track_id;
-	INSERT OR IGNORE INTO composer (composer_name) VALUES (new.track_composer);
+	INSERT OR IGNORE INTO composer (composer_id,composer_name) VALUES ((select max(composer_id) + 1 from composer),new.track_composer);
     UPDATE track set track_composer_id = (select composer_id from composer where composer_name = new.track_composer) where track_id = new.track_id;
-	INSERT OR IGNORE INTO artist (artist_name) VALUES (new.track_artist);
+	INSERT OR IGNORE INTO artist (artist_id,artist_name) VALUES ((select max(artist_id) + 1 from artist),new.track_artist);
     UPDATE track set track_artist_id = (select artist_id from artist where artist_name = new.track_artist) where track_id = new.track_id;
-	INSERT OR IGNORE INTO genre (genre_name) VALUES (new.track_genre);
+	INSERT OR IGNORE INTO genre (genre_id,genre_name) VALUES ((select max(genre_id) + 1 from genre),new.track_genre);
     UPDATE track set track_genre_id = (select genre_id from genre where genre_name = new.track_genre) where track_id = new.track_id;
-    UPDATE OR IGNORE genre set genre_genrelist_id = (select genrelist_id from genrelist where genrelist_name = genre_name) where genre_name = genrelist_name;
+#    UPDATE OR IGNORE genre set genre_genrelist_id = (select genrelist_id from genrelist where genrelist_name = genre_name) where genre_name = genrelist_name;
 END;
 EOF
 }

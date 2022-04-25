@@ -8,8 +8,8 @@ function fhelp () {
 #	vput "testtype|testfield|irgendwasanderes"
  	vget "parm_value" "testtype" "testfield"
 }
-function vgetp 	() { vget -p "$HOME/vparm.sqlite" "parm" $*; }
-function vputp 	() { vput -p "$HOME/vparm.sqlite" "parm" $*; }
+function vgetp 	() { vget -p "$HOME/my_databases/vparm.sqlite" "parm" "$1" "$2" "$3" "${@:4}"; }
+function vputp 	() { vput -p "$HOME/my_databases/vparm.sqlite" "parm" $@; }
 function vgetdb () {
 	local db="$1" tb="$2"
 	is_table "$db" "$tb"; [ $? -eq 0 ] && return
@@ -27,7 +27,7 @@ EOF
 }
 function vget () {
 	local db="/tmp/vparm.sqlite" tb="parm"
-	[ "$1" = "-p" ] && [ db = "$2" ] && [ tb=$3 ] && shift && shift && shift
+	[ "$1" = "-p" ] && db="$2" && tb=$3 && shift && shift && shift
 	vgetdb "$db" "$tb"
 	[ $? -gt 0 ] && setmsg -e "sqlerror create tb" && return 1
 	if [ "$1" = "stmt" ];then getstmt="$true";shift ;else getstmt="$false" ;fi
@@ -38,12 +38,12 @@ function vget () {
 	if [ "$getstmt" = "$true" ];then echo "$stmt";return;fi
 	value=$(sql_execute $db "$stmt") 
 	if [ "$?" -gt "0" ];then return 1 ;fi
-	if [ "$value" = "" ] &&  [ "$default" != "" ];then value="$default";setconfig   "$type|$field|$value" ;fi
+	if [ "$value" = "" ] &&  [ "$default" != "" ];then value="$default";vputp "$type|$field|$value" ;fi
 	echo -e "$value";return 0
 }
 function vput () {
 	local db="/tmp/vparm.sqlite" tb="parm"
-	[ "$1" = "-p" ] && [ db = "$2" ] && [ tb=$3 ] && shift && shift && shift
+	[ "$1" = "-p" ] && db="$2" && tb=$3 && shift && shift && shift
 	vgetdb "$db" "$tb"
 	[ $? -gt 0 ] && setmsg -e "sqlerror create tb" && return 1
     local parm=$* field="" arr="" value="" type="" id=""
@@ -78,12 +78,34 @@ function sql_execute () {
 	set -o noglob 
 	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
 	local db="$1";shift;stmt="$@"
+	sql_execute_save $db $stmt
+	return
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
 	error=$(<"$sqlerror")
 	if [ "$error"  = "" ];then return 0;fi
 	log "$FUNCNAME sql_error: $stmt"
 	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
 	return 1
+}
+function sql_execute_save () {
+	local db="$1" found=$false update=$false;shift
+	echo $* | tr -s ' ' | tr ' ' '\n' |
+	while read tb; do
+		case "$tb" in
+			"update"|"into"|"from")	found=$true;continue;;
+			*) :
+		esac
+		[ $found -eq $false ] && continue
+		update=$true
+		(echo $tb
+			 echo "pragma foreign_key_list($tb)" | sqlite3 "$db"  | grep -i "restrict\|update" | cut -d ',' -f3) | 
+			 sort -u |
+			 while read -r table;do
+			    is_table "$db" "$tb";if [ "$?" -gt 0 ]; then continue;fi
+				local file=$(getfilename "${tpath}/dump" "$table" "$db" ".sql") 
+				if [ ! -f "$file" ];then utils_ctrl "$db" "$tb" "dump" "$file" ;fi
+			 done
+	done
 }
 function pos () {
 	local str pos x
@@ -162,8 +184,8 @@ function log () {
 	[ "$1" 	= "file" ]    	    && 	 logfile="$2" 				  && log ${@:3}		&& return
 	[ "$1" 	= "tlog" ]    	    && 	 tlog 						  && log ${@:2}		&& return
 	[ "$1" 	= "debug"  ]        && [ $debug -eq $false ]   	  	  && return
-	[ "$1" 	= "debug_on" ] 	    &&   $debug=$true		 		  && log ${@:2}		&& return
-	[ "$1" 	= "debug_off" ]     &&   $debug$false			 	  && log ${@:2}		&& return
+	[ "$1" 	= "debug_on" ] 	    &&   debug=$true		 		  && log ${@:2}		&& return
+	[ "$1" 	= "debug_off" ]     &&   debug=$false			 	  && log ${@:2}		&& return
 	[ "$1" 	= "debug"  ] 	    && 	 shift;
 	[  $logenable  -ne $false ] &&	 printf "%s %-20s %s" "$(date +"%y-%m-%d-%T:%N")" "${FUNCNAME[1]}" >> "$logfile";
 	[  $logenable  -ne $false ] && 	 echo -e $lineno $* >> "$logfile"
@@ -181,7 +203,7 @@ function log_histfile () {
 	if [ ! -f "$histfile" ];then 
 		cp    "$logfile" "$histfile"
 	else  
-		cat   "$logfile" "$histfile"  > "$tmpf"
+        cat   "$logfile" "$histfile"  > "$tmpf"
 		cp -f "$tmpf"    "$histfile"
 	fi
 }
@@ -224,6 +246,6 @@ function fullpath () {
 	[ -f $* ] && echo "$(cd -- "$(dirname $*)" && pwd)/$(basename $*)" && return 0
 	return 1
 }
-	declare _quote='"' true=0 false=1 debug=1 trapoff=1 logenable=0 echoenable=1 script=$(fullpath $0) logoff=1 func=1
+	declare _quote='"' true=0 false=1 debug=1 trapoff=1 logenable=0 echoenable=1 script=$(fullpath $0) logoff=1 func=1 tmpf=/tmp/tmpfile.txt
 
 #	fhelp

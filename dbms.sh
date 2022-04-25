@@ -255,7 +255,7 @@ function tb_ctrl_gui () {
 function ctrl_start_new_instance () {
 #	rxvt="urxvt -depth 32 -bg [65]#000000 -geometry 40x20"
 	rxvt="urxvt -bg [100]#FFFFDA -geometry 40x20"
-	$rxvt -title "$1" -e $script ${@:2}
+	$rxvt -title "$1" -e $script ${@:2} &
 }
 function tb_get_where () {
 	local db="$1" tb="$2" wh="${@:3}"
@@ -1071,7 +1071,7 @@ function getfileselect () {
 	setconfig "$type|$field|$db"
 	echo $mydb 
 }
-function is_database () { file -b "$*" | grep -q -i "sqlite"; }
+function is_database () { [ ! -f "$*" ] && return $false;file -b "$*" | grep -q -i "sqlite"; }
 function is_table () {	
 	if [ "$#" -lt "2" ];then return 1;fi 
 	is_database "$1"; if [ "$?" -gt "0" ];then return 1;fi
@@ -1235,12 +1235,41 @@ function sql_execute () {
 	set -o noglob 
 	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
 	local db="$1";shift;stmt="$@"
+	local update=$(sql_execute_save "$db" "$stmt")
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
 	error=$(<"$sqlerror")
-	if [ "$error"  = "" ];then return 0;fi
+	if [ "$error"  = "" ];then 
+		[ $update -eq $true ] && ctrl_uid_sync
+		return 0
+	fi
 	log "$FUNCNAME sql_error: $stmt"
 	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
 	return 1
+}
+function sql_execute_save () {
+	set -o noglob 
+	[ "$1" = "$dbparm" ] && echo $false && return
+	local db="$1" found=$false;shift;echo $false > ${tpath}/tmpparm.txt
+	echo $* | tr -s ' ' | tr ' ' '\n' |
+	while read tb; do
+		case "$tb" in
+			"update"|"into"|"delete")	found=$true;continue;;
+			*) :
+		esac
+		[ $found -eq $true ]  && [ "$tb" = 'from' ] && continue
+		[ $found -eq $false ] && continue
+		found=$false
+		(echo $tb
+			 echo "pragma foreign_key_list($tb)" | sqlite3 "$db"  | grep -i "restrict\|update" | cut -d ',' -f3) | 
+			 sort -u |
+			 while read -r table;do
+			    is_table "$db" "$tb";if [ "$?" -gt 0 ]; then continue;fi
+				local file=$(getfilename "${tpath}/dump" "$table" "$db" ".sql") 
+				echo $true > ${tpath}/tmpparm.txt;
+				if [ ! -f "$file" ];then utils_ctrl "$db" "$tb" "dump" "$file" ;fi
+			 done
+	done
+	echo $(<"${tpath}/tmpparm.txt")
 }
 function pos () {
 	local str pos x

@@ -20,7 +20,9 @@
         declare -t debug_on=0
 		declare -t verbose_on=0
 		declare -t sqlerror="/tmp/sqlerror.txt"
+		declare -t tpath="/tmp"
 		declare -t music="$HOME/my_databases/music.sqlite"
+		declare -t dbms="$HOME/my_scripts/dbms.sh"
 		export MYPATH="$HOME/my_scripts"
 function func_tb_meta_info () {
 	local db="$1" tb="$2" row="$3" parms=${@:4}
@@ -108,8 +110,90 @@ function func_sql_execute () {
 	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
 	return 1
 }
-function sql_execute () { func_sql_execute $*; } 
-function sql_execute () { func_sql_execute $* ; }
+#function sql_execute () { func_sql_execute $*; } 
+#function sql_execute () { /home/uwe/my_scripts/dbms.sh --func sql_execute $* ; }
+function sql_execute () {
+	set -o noglob 
+	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
+	local db="$1";shift;stmt="$@";cmd=$(echo $stmt | tr '[:upper:]' '[:lower:]') 
+	if [ "$db" = "commit" ]; then
+		setmsg -q "remove all dumps"
+		if [ "$?" -eq 0 ];then find "${tpath}/.dbms" -name "dump*" -delete ;fi
+		return 
+	fi 
+	if [ "$db" = "rollback" ]; then
+		find "${tpath}/.dbms" -name "dump*" |
+		while read -r file;do
+			line=$(head -n 1 "$file")
+			set -- $line;tb=$2;db=${@:3}	
+			setmsg -q "restore $tb in $db"
+			[ $? -ne $true ] && continue
+			echo ".read $file" | sqlite3 "$db"
+			rm "$file"
+		done
+		echo $(date "+%Y_%m_%d_%H_%M_%S_%N") > "/tmp/.dbms/socket" 	
+		return
+	fi
+	local update=$(sql_execute_save "$db" "$cmd")
+	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
+	error=$(<"$sqlerror")
+	if [ "$error"  = "" ];then 
+		[ $update -eq $true ] && echo $(date "+%Y_%m_%d_%H_%M_%S_%N") > "/tmp/.dbms/socket" 
+		return 0
+	fi
+	log "$FUNCNAME sql_error: $stmt"
+	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
+	return 1
+}
+function sql_execute_save () {
+	set -o noglob 
+	[ "$1" = "$dbparm" ] && echo $false && return
+	local db="$1" found=$false;shift;echo $false > ${tpath}/tmpparm.txt
+	echo $* | tr -s ' ' | tr ' ' '\n' | tr '[:upper:]' '[:lower:]' |
+	while read tb; do
+		case "$tb" in
+			"update"|"into"|"delete")	found=$true;continue;;
+			*) :
+		esac
+		[ $found -eq $true ]  && [ "$tb" = 'from' ] && continue
+		[ $found -eq $false ] && continue
+		found=$false
+		(echo $tb
+			 echo "pragma foreign_key_list($tb)" | sqlite3 "$db"  | grep -i "restrict\|update" | cut -d ',' -f3) | 
+			 sort -u |
+			 while read -r table;do
+			    is_table "$db" "$tb";if [ "$?" -gt 0 ]; then continue;fi
+				local file=$(getfilename "${tpath}/.dbms/dump" "$table" "$db" ".sql") 
+				echo $true > ${tpath}/tmpparm.txt;
+				if [ ! -f "$file" ];then 
+					echo "-- $tb $db"  > "$file"
+					echo ".dump $tb" | sqlite3 "$db" | 
+					while read -r line;do
+						echo $line
+						if [ "${line:0:5}" = "BEGIN" ];then 
+							echo "DROP  TABLE IF EXISTS $tb;"  
+						fi
+					done >> "$file"
+				fi
+			 done
+	done
+	echo $(<"${tpath}/tmpparm.txt")
+}
+function is_database () { [ ! -f "$*" ] && return $false;file -b "$*" | grep -q -i "sqlite"; }
+function is_table () {	
+	if [ "$#" -lt "2" ];then return 1;fi 
+	is_database "$1"; if [ "$?" -gt "0" ];then return 1;fi
+	local tb=$(echo ".table $2" | sqlite3 "$1")
+	if [ "$tb" = "" ];then return 1;else return 0;fi
+}
+function getfilename () {
+	local del="" file=""
+	while [ $# -gt 0 ];do
+		if [ -f "$1" ]; then arg=$(echo "$1" | tr '/._' '_#_');else arg="$1";fi
+		file="$file$del$arg";shift;del="_"
+	done
+	echo "${file//_\./\.}" | tr -s '_'
+}
 function trap_init () {
     script="$0";script=${script##*\\};
     exec 4< /dev/stdin

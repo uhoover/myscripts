@@ -1,10 +1,12 @@
 #!/bin/bash
 #
-	source /home/uwe/my_scripts/my_functions.sh
+	source /home/uwe/my_scripts/myfunctions.sh
 	set -o noglob
+	
+
 #
 function _ctrl () {
-	echo $$ >/tmp/script_pid.tmp
+	echo $$ > /tmp/script_pid.tmp
 	[ ! -d $HOME/tmp ] && mkdir $HOME/tmp
 	folder="${0##*\/}"
 	mypath="/tmp/.${folder%%\.*}"
@@ -17,25 +19,90 @@ function _ctrl () {
 	fileurl="$urlliste"
     tvliste="${mypath}/tv_channels_list.xspf"
     radioliste="${mypath}/radio_channels_list.xspf"
-    [ ! -d $mypath ] && mkdir $mypath && set -- create_playlist
-#    create_playlist;exit
-#    cron_get_url "Das Erste (ARD)"
-#    cat "$fileparm";exit
+    tmpf="${mypath}/tempfile.txt"
+    dbinfo="/home/uwe/my_databases/info.sqlite"
+    [ ! -d $mypath ] && mkdir $mypath  
+#	ftest;return
 	if [ $# -eq 0 ];then 
-		func=$(zenity --list --column 'action' 'create_cronjob' 'delete_cronjob' 'record' 'create_playlist')
+		func=$(zenity --list --height=300 --column 'action' 'create_cronjob' 'delete_cronjob' 'record' 'create_playlist' 'play' 'play_timeshift' 'play_tv' 'play_tv_timeshift' 'play_radio' 'play_radio_timeshift')
 	else
 		func=$1;shift
 	fi
 	case "$func" in 
-		 "cronjob")  		create_cronjob  $@;;
-		 "create_cronjob")  create_cronjob  $@;;
-		 "delete")   		delete_cronjob  $@;;
-		 "delete_cronjob")  delete_cronjob  $@;;
-	 	 "record")   		record_channel  $@;;
-		 "playlist") 		create_playlist $@;;
-		 "create_playlist") create_playlist $@;;
-		 *) log "parameter unbekannt $func"; 
+		 "cronjob")  		create_cronjob  	$@;;
+		 "create_cronjob")  create_cronjob  	$@;;
+		 "delete")   		delete_cronjob  	$@;;
+		 "delete_cronjob")  delete_cronjob  	$@;;
+	 	 "record")   		record_channel  	$@;;
+	 	 "record_channel")  record_channel  	$@;;
+		 "playlist") 		create_playlist 	$@;;
+		 "create_playlist") create_playlist 	$@;;
+		 "play") 			play_stream_neu	$false ;;
+		 "play_timeshift") 	play_stream_neu	$true  ;;
+		 "play_tv") 		play_stream	$false tv		$@;;
+		 "play_radio") 		play_stream	$false radio	$@;;
+		 "play_tv_timeshift") 		play_stream	$true tv	$@;;
+		 "play_radio_timeshift") 	play_stream	$true radio	$@;;
+		 "play_stream") 	play_stream_neu	$@;;
+		 "timeshift_on") 	vputp "-|timeshift|$true"	$@;;
+		 "timeshift_off") 	vputp "-|timeshift|$false"	$@;;
+		 *) log "parameter unbekannt $func $@"; 
 	esac
+}
+function ftest2 () {
+	cat << EOF
+			<buttonneu>
+				<label>help</label>
+				<variable>BUTTONHELP$label</variable>
+				<action>$script --func tb_ctrl_gui "b_help     | $pid | $label | \$ENTRY$label | \$CBOXTB$label"</action>
+			</button>
+EOF
+}
+function ftest () {
+	set -x
+	create_cronjob "Deutschlandfunk Kultur#Nachrichten#2022#4#15#20#0#3"
+	set +x
+}
+function play_stream () {
+	timeshift=$1;shift;func=$1;shift;line="";start=$false
+	while IFS='#' read short channel url trash;do 
+		[ "$(trim_space $short)" = 'daserste' ] 		&& start=$true
+		[  $start -ne $true ] && [ "$func" = "tv" ]		&& continue
+		[  $start -eq $true ] && [ "$func" = "radio" ]	&& break
+		line="$line '$(trim_space $channel)' '$(trim_space $url)'"
+	done < "${mypath}/url_list.txt"
+	while : ;do
+		url=$(eval 'zenity --width=650 --height=800 --list --print-column 2 --column sender --column url' $line)
+		[ "$url" = "" ] && break
+		if [ $timeshift -eq $true ]; then  
+			file="/tmp/ts_${func}_$(date "+%Y_%m_%d_%H_%M").ts"
+			[ -f "$file" ] && rm "$file"
+			(ffmpeg -hide_banner -re -i "$url" -codec: copy "$file"  & ) 2> /dev/null
+			zprogress
+			url="$file"
+		fi
+		ffplay "$url" &
+	done
+	[ $timeshift -eq $false ] && return
+	setmsg -q ffmpeg beenden
+	[ $? -eq 0 ] && killall ffmpeg
+}
+function play_stream_neu () {
+	if [ $# -eq 1 ]; then
+		vputp "play|timeshift|$*"
+		/home/uwe/my_scripts/dbms.sh "$dbinfo" "channels" 
+		return
+	fi
+	timeshift=$(vgetp "parm_value" "play" "timeshift")
+	shift;parm="$*";IFS='|';arr=($parm);unset IFS;db=$(trim_space ${arr[3]});tb=$(trim_space ${arr[4]});id=$(trim_space ${arr[5]})
+#	setmsg -i "timeshift $timeshift\ndb ${arr[3]}\ntb ${arr[4]}\nid ${arr[5]}"
+	stmt=".separator |\nselect title,url from $tb where rowid = $id"
+	rc=$(sql_execute "$db" "$stmt" | tr -d '"');title=$(trim_space ${rc%%\|*});url=$(trim_space ${rc#*\|})
+	setmsg -i "title $title\nurl $url"
+	ffplay -window_title "$title" "$url"
+}
+function zprogress ()    {
+(for i in 20 40 70 100;do echo "$i";sleep 1;done) | zenity --progress --text="buffering..." --percentage=0 --auto-close
 }
 function _curl_liste () {
 	outfile="$1"
@@ -66,10 +133,12 @@ function cron_get_url () {
 		   erg=$(echo $line | grep -i "mp3") 
 		   if [ "$erg" = "" ]; then continue;fi
 		fi
-		echo $line > $fileparm
+		echo $line # > $fileparm
+		return
 	done
 }
-function cron_setparm () {
+function cron_setparm_del () {
+# Deutschlandfunk Kultur#Nachrichten#2022#4#15#20#0#3
 	log debug_off
 	_channel=$1;log debug "channel   $1";shift;schannel=$(_short_name $_channel);log debug "schannel  $schannel"
 	_title=$1;log debug "title   $1";shift
@@ -84,21 +153,28 @@ function cron_setparm () {
 	log debug_off
 }
 function cron_cmd () {
-	func=$1;shift
-	if [ $# -gt 0 ];then 
-		parm=$*
-	else
-		parm="WDR#Meister des Alltags#2021#1#28#10#45#30#https://www.swr.de/meister-des-alltags/-/id=13831182/c17p8c/index.html"
-	fi
-	IFS='#';cron_setparm  $parm;unset IFS
-	cron_get_url $_channel
-	line=$(<$fileparm)
-	IFS='#';set  $line;unset IFS
-	type=$(echo $4 | tr -d " ")
-	url=$(echo $3 | tr -d " ")
-#	target=$(echo "$schannel $_title $_date ${_time}.$type" | tr " :" "_-")
+    log $@ 	
+    func=$1;shift
+	parm=$*
+	IFS='#';arr=($parm);unset IFS
+	_channel=${arr[0]};schannel=$(_short_name $_channel)
+	_title=${arr[1]} 
+	_year=${arr[2]} 
+	_month=${arr[3]} 
+	_day=${arr[4]} 
+	_date=$(printf "%d-%02d-%02d" $_year $_month $_day)
+	_hour=${arr[5]} 
+	_minute=${arr[6]} 
+	_time=$(printf "%02d:%02d" $_hour $_minute) 
+	_length=${arr[7]}
+	line=$(cron_get_url $_channel)
+	IFS='#';arr2=($line);unset IFS
+	type=$(echo ${arr2[3]} | tr -d " ")
+	[ "$type" = "radio" ] && type="mp3"
+	[ "$type" = "tv" ]    && type="mp4"
+	url=$(echo ${arr2[2]} | tr -d " ")
 	target=$(echo "$schannel ${_title}.$type" | tr " :" "_-")
-	if [ "$type" = "mp4" ];then pathtarget=${pathvideo};else pathtarget=${pathmusic};fi
+	if [ "$type" = "mp4" ] || [ "$type" = "tv" ];then pathtarget=${pathvideo};else pathtarget=${pathmusic};fi
 	[ ! -f "$pathtarget" ] && mkdir -p $pathtarget
 	target="${pathtarget}/$target" 
 	pfad=$(readlink -f $0)
@@ -107,7 +183,7 @@ function cron_cmd () {
 }
 function create_cronjob () {
 	#cronjob {channel_name}#{title}#{start_year}-{start_month}-{start_day}#{start_hour}:{start_minute}#{length_minutes}#{url}
-	log "create cronjob $@" 
+	log "$@" 
 	cmd=$(cron_cmd create $@)
 	log $cmd
 	set -o noglob
@@ -117,7 +193,7 @@ function create_cronjob () {
 	echo "Aufnahme hinzugefuegt: $cmd"
 }
 function delete_cronjob () {
-	log "delete cronjob $@"
+	log "$@"
 	title=$(cron_cmd delete $@) 
 	if [ "$(crontab -l | grep -v "^#"  | grep -l $title)" = "" ]; then echo "kein cronjob mit $title";return;fi 
 	set -o noglob
@@ -127,19 +203,17 @@ function delete_cronjob () {
 	echo "cronjob(s) geloescht mit $title"
 }
 function record_channel () {
-    set -x
 	if [ $# -lt 1 ];then 
 		set -- "https://das.erste" "/tmp/daserste.mp4" "30"
 	fi
-	log "record stream start $1 $2 $3"
 	file="$2";first=${file%\.*};last=${file##*\.};file="${first}_$(date +%Y_%m_%d_%H_%M).$last"
+	log "record stream start $1 $2 $3 $file"
 #	ffmpeg -hide_banner -re -i "$1" -codec: copy "$file" 2> /dev/null &
     ffmpeg -hide_banner -re -i "$1" -codec: copy "$file"  &
 	lrc=$!
 	tsleep=$3;tsleep=$(($tsleep*60))
 	sleep $tsleep
 	kill -TERM $lrc	 
-    set +x
 	log "record strean end"
 }
 function pl_write_liste () {
@@ -147,6 +221,7 @@ function pl_write_liste () {
 }
 function pl_write_head () {
 	if [ "$*" = "tv" ];then ftype="mp4";else ftype="mp3";fi
+	ftype="$*"
 	pl_write_liste '<?xml version="1.0" encoding="UTF-8"?>'
 	pl_write_liste '<playlist xmlns="http://xspf.org/ns/0/" xmlns:vlc="http://www.videolan.org/vlc/playlist/ns/0/" version="1">'
 	pl_write_liste '	<title>'$@'</title>'
@@ -279,19 +354,21 @@ function pl_radio_rest () {
     image="";title="kriola";url="http://stream.laut.fm/kriola.m3u";pl_write_track	 
 } 
 function pl_xine () {
+	start=$false
 	while read -r line;do
 		str=${line#*<};tag=${str%%\>*}
 		str2=${str#*>};url=${str2%%\<*}
+		[ "$tag" = "trackList" ] 	&& start=$true && continue
+		[  $start -ne $true ]		 			   && continue
 		case "$tag" in
 			  track)	echo "entry {" ;;
-			  title)	str3="	identifier = $url"  ;;
-			  location)	echo "$str3;"
-						echo "	mrl = $url;"  ;;
+			  title)	echo "	identifier = $url"  
+						echo "$str3;";;
+			  location)	str3="	mrl = $url;"  ;;
 			  /track)	echo "};" ;;
 			*) :
 		esac
 	done < "$*"
-
 }
 function create_playlist () {
 	log "create playlist $@" 
@@ -300,17 +377,23 @@ function create_playlist () {
     radioliste3="${mypath}/radio_channels_list3.xspf"
     tfile="${mypath}/curl.http"
 	ofile="${mypath}/curl.txt"
-	[ -f $urlliste ] && rm $urlliste
+#	[ -f $urlliste ] && rm $urlliste
+	echo "short#title#url#type" > "$urlliste"
 #   id=-1;pl_radio_dlf;pl_write_bottom 
 	id=-1;pl_radio_wdr;pl_radio_dlf;pl_radio_rest;pl_write_bottom
     id=-1;pl_tv
     pl_xine "$tvliste" > "${mypath}/tv_channels_list.tox" 
 	pl_xine "$radioliste" > "${mypath}/radio_channels_list.tox" 
+	return
+	echo "drop table if exists channels;" > "$tmpf"
+	echo ".separator #"  >> "$tmpf"
+	echo ".import  $urlliste channels"  >> "$tmpf"
+	sql_execute "$dbinfo" ".read $tmpf"
 }
 function xexit () {
 	exit
 }
-	log file start
+	log logon
 	_ctrl $*
-	log stop
-xexit	
+	log logoff
+#xexit	
