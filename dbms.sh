@@ -136,13 +136,15 @@ function tb_ctrl () {
 	else
 	    xmlfile="${tpath}/${xfile}"
 	    wtitle=$(echo $wtitle $notebook | tr ' ' '-')
+	    page=$(getconfig "parm_value" "nbpage" "$wtitle" "0")
 		echo "<window title=\"$wtitle\" allow-shrink=\"true\">" > $xmlfile
 		if [ "${#arr[@]}" -lt "2" ];then visible="false" ;else visible="true" ;fi
-		echo "<notebook show-tabs=\"$visible\"  tab-labels=\""$(echo $notebook | tr '_ ' "-|")"\">" >> $xmlfile
+		echo "<notebook show-tabs=\"$visible\" page=\"$page\" tab-labels=\""$(echo $notebook | tr '_ ' "-|")"\">" >> $xmlfile
 		for arg in "${arr[@]}" ;do
 			IFS='#';set -- $arg;unset IFS 
 	  		y_get_xml_tb "$1" "$2" "$3" "$pid"  | grep -v '^exclude' | grep -v '^#' >> $xmlfile 
 		done
+		echo "<variable>$wtitle</variable>" >> $xmlfile
 		echo "</notebook></window>" >> $xmlfile
 	fi
     if [ "$geometry_tb" = "" ];then geometry_tb=$(getconfig "parm_value" "geometry" "$geometrylabel" '800x800+100+100');fi
@@ -155,10 +157,11 @@ function tb_ctrl () {
     while read -r line;do
 		echo $line															# save defaults
 		field="${line%%\=*}";value=$(echo "${line##*\=}" | tr -d '"')
-		if [ "${line:0:6}" = "CBOXTB" ];then  labela+=( ${field:6} ) ;fi  	# label
-		if [ "${line:0:6}" = "CBOXTB" ];then cboxtba+=( $value ) ;fi 		# tabelle
-		if [ "${line:0:5}" = "ENTRY" ]; then  entrya+=( $value ) ;fi 		# database
-		if [ "${line:0:4}" = "TREE" ];  then   treea+=( $value ) ;fi 		# last selected row
+		if [ "${line:0:6}" = "CBOXTB" ];	then  labela+=( ${field:6} ) ;fi  	# label
+		if [ "${line:0:6}" = "CBOXTB" ];	then cboxtba+=( $value ) ;fi 		# tabelle
+		if [ "${line:0:5}" = "ENTRY" ]; 	then  entrya+=( $value ) ;fi 		# database
+		if [ "${line:0:4}" = "TREE" ];  	then   treea+=( $value ) ;fi 		# last selected row
+		if [ "${field}"    = "$wtitle" ]; 	then setconfig "nbpage|$wtitle|$value" ;fi 		# last selected tab
     done < $tmpf
     for ((ia=0;ia<${#cboxtba[@]};ia++)) ;do
 		if [ "${cboxtba[$ia]}" != "" ];	then
@@ -302,7 +305,7 @@ function tb_meta_info () {
 	IFS="#";local parmarray=($parmlist);unset IFS 
 	local del="" del2="" del3="" line="" nparmlist="" 
 	GTBNAME="" ;GTBTYPE="" ;GTBNOTN="" ;GTBDFLT="" ;GTBPKEY="";GTBMETA="" 
-	GTBSELECT="";GTBINSERT="";GTBUPDATE="";GTBUPSTMT="";GTBSORT="";GTBMAXCOLS=-1
+	GTBSELECT="";GTBINSERT="";GTBUPDATE="";GTBUPSTMT="";GTBSORT="";GTBCOLSIZE="";GTBMAXCOLS=-1
 	meta_info_file=$(getfilename "$tpath/meta_info" "${tb}" "${db}" ".txt")
 	local ip=-1 ia=-1  
 	sql_execute "$db" ".headers off\nPRAGMA table_info($tb)"   > "$meta_info_file"
@@ -311,7 +314,7 @@ function tb_meta_info () {
 		GTBMAXCOLS=$(($GTBMAXCOLS+1))
 		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
 		GTBNAME=$GTBNAME$del"${arr[1]}";GTBTYPE=$GTBTYPE$del"${arr[2]}";GTBNOTN=$GTBNOTN$del"${arr[3]}"
-		GTBDFLT=$GTBDFLT$del"${arr[4]}";GTBPKEY=$GTBPKEY$del"${arr[5]}"
+		GTBDFLT=$GTBDFLT$del"${arr[4]}";GTBPKEY=$GTBPKEY$del"${arr[5]}";GTBCOLSIZE="${GTBCOLSIZE}${del2}1"
 		GTBMETA=$GTBMETA$del2"${arr[2]},${arr[3]},${arr[4]},${arr[5]}"
 		if [ "${arr[2]}" = "INTEGER" ] || [ "${arr[2]}" = "REAL" ] ;then GTBSORT="${GTBSORT}${del2}1";else GTBSORT="${GTBSORT}${del2}0";fi
 		if [ "${arr[5]}" = "1" ] ;then
@@ -1438,12 +1441,13 @@ function y_get_xml_tb () {
 	local label="$1" db="$2" tb="$3" pid="$4" header_visible="true" xterminal="exclude"
 	if [ "$label" = "$tb" ]; then
 		tb_meta_info "$db" "$tb"
-		lb=$(echo $GTBNAME | tr '_,' '-|');sensitiveCBOX="false";sensitiveFSELECT="false";sortcol=$GTBSORT 
+		lb=$(echo $GTBNAME | tr '_,' '-|');sensitiveCBOX="false";sensitiveFSELECT="false";sortcol=$GTBSORT;colsize="$GTBCOLSIZE" 
 	else
-		lb="c1";sortcol="1"
+		lb="c1";sortcol="1";colsize=1
 		for ((ia=2;ia<=$maxcols;ia++)) ;do
 			lb=$lb"|c"$ia
 			sortcol=$sortcol"|0"
+			colsize=$colsize"|1"
 		done
 		sensitiveCBOX="true";ID=0;sensitiveFSELECT="true" 
 	fi
@@ -1474,7 +1478,7 @@ function y_get_xml_tb () {
 			<action type="refresh">DUMMY$label</action>
 		</entry>
 		<tree headers_visible="$header_visible" hover-selection="false" hover-expand="true" auto-refresh="true" 
-		 exported_column="$ID" sort-column="$ID" column-sort-function="$sortcol" $selected_row>
+		 exported_column="$ID" sort-column="$ID" column-sort-function="$sortcol" $selected_row column-sizing="$colsize">
 			<label>"$lb"</label>
 			<variable>TREE$label</variable>
 			<input file>"$exportfile"</input>			
