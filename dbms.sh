@@ -556,7 +556,7 @@ function utils_ctrl () {
 	elif [ "$(echo $func | grep 'gui')" 	!= "" ]; 	then edit=$true;create=$true;check_inuse=$true						 
 	elif [ "$(echo $func | grep 'read')" 	!= "" ]; 	then read=$true
 	elif [ "$(echo $func | grep 'import')" 	!= "" ]; 	then import=$true 
-	elif [ "$(echo $func | grep 'reload')" 	!= "" ]; 	then reload=$true 
+	elif [ "$(echo $func | grep 'reload')" 	!= "" ]; 	then reload=$true;import=$true
 	elif [ "$(echo $func | grep 'dump')" 	!= "" ]; 	then dump=$true
 	elif [ "$(echo $func | grep 'restore')" != "" ]; 	then restore=$true
 	else	setmsg -i "abort...func not known $func";return
@@ -576,7 +576,7 @@ function utils_ctrl () {
 			tb=$(zenity --list --height=400 --column table $($script --func tb_get_tables $db))
 		fi 
 		if [ "$tb" = "" ]; then setmsg -n "abort! no table selected";return;fi
-		if [ $reload = $true ];then import=$true  ;fi
+#		if [ $reload = $true ];then import=$true  ;fi
 	fi 
 	if [ "$check_inuse" = "$true" ];then 
 		find "$tpath" -name "*xx*" -exec  grep "$db" {} \; | grep "$tb" > "$tmpf"

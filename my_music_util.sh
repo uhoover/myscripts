@@ -43,7 +43,7 @@ function _amain () {
 	    shift
 	done
  	log logon 
-# 	ftest2;return 
+# 	ftest2;return select * from album
 # 	mypath="/media/uwe/media/Musik/radioripps"
 # 	read_path_to_import $mypath
  	[ -f "$db" ] && rm -r "$db"
@@ -169,7 +169,7 @@ Input #0, ogg, from '/media/uwe/daten/music/Harfe/Deilmann, Uta/Harfenklaenge/8 
 EOF
 }
 function check_tb () {
-	for tb in album artgrp artist catalog composer genre genrelist instrument instrumentation title track; do
+	for tb in album artgrp artist catalog composer genre genrelist instrument instrumentation title track vtrack; do
 		echo $tb
 		file="${sqlpath}/create_table_${tb}.sql"
 		[ -f $file ] && rm "$file"
@@ -574,7 +574,6 @@ function y_get_create_tb_album () {
 	CREATE TABLE album(
 	  "album_id" 					INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL UNIQUE,
 	  "album_name"					TEXT,
-	  "album_track_id"				INTEGER,
 	  "album_opus_nr"				TEXT,
 	  "album_catalog_id"			INTEGER,
 	  "album_instrumentation_id"	INTEGER,
@@ -1041,6 +1040,26 @@ function y_get_create_tb_title () {
 		"title_track_id"			INTEGER,
 		"title_info"				TEXT
 );
+EOF
+}
+function y_get_create_tb_vtrack () {
+	cat << EOF
+    CREATE VIEW vtrack AS 
+	SELECT
+	    track_id 		as rowid,
+	    album_name 		as album,
+	    title_name		as title,
+	    composer_name 	as composer,
+	    artist_name 	as artist,
+	    genre_name 	    as genre
+    FROM
+	        track
+ INNER JOIN album 	 ON album_id 		= track.track_album_id
+ INNER JOIN title 	 ON title_id 		= track.track_title_id
+ INNER JOIN composer ON composer_id 	= track.track_composer_id
+ INNER JOIN artist	 ON artist_id		= track.track_artist_id
+ INNER JOIN genre	 ON genre_id 		= track.track_genre_id
+ order by rowid;
 EOF
 }
 function y_get_create_tb_track () {
