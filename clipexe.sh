@@ -17,7 +17,7 @@ function aexit() {
 }
 	trap aexit EXIT
 #	set -e  # bei fehler sprung nach xexit
-# 	select * from composer where composer_id < 15
+# 	select * from composer limit 10
 function ctrl () {
 #  .headers on\nselect * from track where track_id < 10;  
 	local func="" cmd="" db="" tb=""
@@ -28,7 +28,7 @@ function ctrl () {
 	xclip -o > "$tmpf" 2> /dev/null 
 	parm=$(<"$tmpf")
 #	[ $? -gt 0 ] && setmsg -n no data in clipboard && return
-	[ "$parm" = "" ] && parm=".headers on\nselect * from track where track_id < 10;"
+	[ "$parm" = "" ] && parm=".headers on\nselect * from track limit 10;"
 	func=$(echo ${parm%% *} |  tr '[:upper:]' '[:lower:]')
 	case $func in
 		 select|update|insert|delete|reload|.*) cmd="sql_execute $pdb $parm";;
@@ -65,7 +65,10 @@ function ctrl () {
 		echo "rs_${di}_${dn} () { # sqlite $pdb $cmd" >> "$lfile" 	
 	fi
 #	setmsg -i "$LINENO $FUNCNAME pause"
-	$cmd | while read line;do echo "$line" >> "$lfile";echo $line ;done   
+	$cmd >> "$lfile"
+	urxvt -e bash -c "cat $lfile;read -p 'press enter to continue'"
+#	urxvt -e bash -c $cmd | while read line;do echo "$line" >> "$lfile";echo $line;done    
+#	urxvt -e bash -c $cmd | while read line;do echo "$line" >> "$lfile";echo $line ;done;read -p ' weiter mit taste'   
 	str=$(log logoff);estr=$(echo $str | tr -d '\n')
 	echo "} # $estr" >> "$lfile"
 	set +x
