@@ -16,14 +16,15 @@ function _exit () {
 	readfile="$path/find.txt"
 	headfile="$path/taghead.txt"
 #	sqlpath="/home/uwe/db/sql/music/"; [ ! -d "sqlpath" ] && mkdir -p "$sqlpath"
-	sqlpath="$tpath/sql/"; [ ! -d "sqlpath" ] && mkdir -p "$sqlpath"
+	sqlpath="$path/sql/"; [ ! -d "sqlpath" ] && mkdir -p "$sqlpath"
 	tmpf="/$tpath/tmp.txt"
 	readfile="/$tpath/read.txt"
-#	db="/home/uwe/my_databases/music_test.sqlite"
-	db="$tpath/music.sqlite"
+	db="/home/uwe/my_databases/music.sqlite"
+#	db="$tpath/music.sqlite"
 	parmfile="/tmp/parmfile.txt"
     echo 'pdb="'$db'"' > "$parmfile" 
 	importtb="import"
+	dbms="/home/uwe/my_scripts/dbms.sh"
 #
 function _amain () {
 	pparms=$*;parm="";local mypath="/media/uwe/daten/music";func=$false;rename_it=$false;drop_it=$false
@@ -170,13 +171,13 @@ EOF
 }
 function check_tb () {
 	for tb in album artgrp artist catalog composer genre genrelist instrument instrumentation title track vtrack; do
-		echo $tb
 		file="${sqlpath}/create_table_${tb}.sql"
 		[ -f $file ] && rm "$file"
 		[ ! -f $file ] && (echo "	drop table if exists $tb;";y_get_create_stmt "$tb") > "$file"
-		is_table "$db" "$tb"
+		is_table "$db" "$tb" 
 		[ $? -eq $true ] && continue
 		sql_execute "$db" ".read $file"
+		echo $? $tb $db  
 	done
 }
 function import_tags () {
@@ -185,7 +186,7 @@ function import_tags () {
 	is_table "$db" "import"
 	[ $? -eq $false ] && [ -f "$tagfile" ] && sql_execute "$db" ".separator |\n.import $tagfile import"
 	sql_import | grep -v '#' > "$readfile"
-	setmsg -i "$LINENO $FUNCNAME pause"
+#	setmsg -i "$LINENO $FUNCNAME pause"
 	sql_execute "$db" ".read $readfile"
 	timestamp=$(date "+%Y-%m-%d %H:%M:%S")
 	    #~ title="filename nb_streams nb_programs format_name format_long_name start_time duration size bit_rate probe_score encoder \
@@ -1101,7 +1102,7 @@ function y_get_create_tb_track () {
 CREATE TRIGGER track_after_insert 
    AFTER INSERT ON track
 BEGIN
-	INSERT OR IGNORE INTO album (album_id,album_name,album_tracks,album_track_id,album_path) VALUES ((select max(album_id) + 1 from album),new.track_album,new.track_nr_total,new.track_id,rtrim(new.track_filename,replace(new.track_filename, '/', '')));
+	INSERT OR IGNORE INTO album (album_id,album_name,album_tracks,album_path) VALUES ((select max(album_id) + 1 from album),new.track_album,new.track_nr_total,rtrim(new.track_filename,replace(new.track_filename, '/', '')));
     UPDATE track set track_album_id = (select album_id from album where album_name = new.track_album) where track_id = new.track_id;
 	INSERT OR IGNORE INTO title (title_id,title_name,title_name_new,title_track_nr) VALUES ((select max(title_id) + 1 from title),new.track_title,new.track_title,new.track_nr);
     UPDATE track set track_title_id = (select title_id from title where title_name = new.track_title) where track_id = new.track_id;

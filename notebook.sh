@@ -7,7 +7,7 @@
 # for fora fori foria while wtrue read    << snipped    
 # str strf strl strc strca strd strda     << snipped    
 # func funcl trap	 arr arrl               << snipped    
- source /home/uwe/my_scripts/my_functions.sh
+ source /home/uwe/my_scripts/myfunctions.sh
 function aexit() {
 	retcode=0 
 	log logoff
@@ -177,14 +177,97 @@ EOF
 	echo ".read /tmp/nb.txt" | sqlite3 /home/uwe/my_databases/music.sqlite
 }
 function ctrl () {
+
 	ifile="/tmp/in.txt";[ ! -f "$ifile" ] && echo 1 > "$ifile"
-	page=$(<$ifile)
-	log logon
+	echo "pdb=\"$db\";ptb=\"$tb\";delim=\"|\" # $ifile" > "$ifile"
+	db="/home/uwe/my_databases/music.sqlite";tb="catalog";separator="|"
+	line=$(grep "$ifile" "$ifile");[ "$line" != "" ] && eval "$line"
+#	echo "db $pdb"
+#	echo "tb $ptb"
+#	echo "dl $delim"
+#	return
+#	page=$(<$ifile)
+#	log logon
 #	notebook
-    view	
+#    view	
 # 	tree
 #	actions
+#	preparedStatement
+	import
 	return
 }
+function import () {
+	import='/tmp/import.txt'
+	read='/tmp/read.sql'
+	cat << EOF > $import
+catalog_id,catalog_name,catalog_short
+1,"Verzeichnis nach Fritz",Kn
+70,"Verzeichnis nach Uwe",Uwe
+,"Verzeichnis nach Dani",Dani
+EOF
+	tb_meta_info "$db" "$tb"
+	header=$(head -n 1 $import)
+	IFS=',';fields=($GTBNAME);cols=($header)
+	IFS='|';meta=($GTBMETA);unset IFS
+	declare -p fields meta cols
+	for ((ib=0;ib<${#fields[@]};ib++)) ;do 
+		af[$ib]='null'
+		key=${meta[$ib]}
+		ak[$ib]=${key##*\,}
+		am[$ib]=${key%%\,*}
+	done
+	update="";insert="";pk="";pkb="";pkt="";tmp="tmp";select="";on=""
+	for ((ia=0;ia<${#cols[@]};ia++)) ;do
+		found=$false 
+		for ((ib=0;ib<${#fields[@]};ib++)) ;do
+			[ "${cols[$ia]}" != "${fields[$ib]}" ] && continue
+			found=$true
+			af[$ib]="${fields[$ib]}"
+			break
+		done
+		[ $found -eq $true ] && continue
+		echo "column not known ${cols[$ib]}"
+		return 1
+	done
+	(
+	echo "drop table if exists $tmp;"
+	echo ".separator ,"
+	echo ".import \"$import\" $tmp"
+	echo "-- null value in primary key for insert to force autoincrement"
+	) > $read
+	for ((ib=0;ib<${#fields[@]};ib++)) ;do
+		select="${select},a.${af[$ib]}"
+		if 	[ ${ak[$ib]} -lt 1 ];then
+			if [ "${af[$ib]}" != "null" ];then 
+				update="${update},${fields[$ib]}"
+				set="${set},${tmp}.${fields[$ib]}"
+			fi
+			continue
+		fi
+		on="${on}and a.${fields[$ib]} = b.${fields[$ib]}" 
+		[ "$pk" = "" ] && pk="${fields[$ib]}"
+		wh="${wh}or b.${fields[$ib]} is null" 
+		echo "update $tmp set ${fields[$ib]} = null where abs(${fields[$ib]}) = 0;" >> $read
+	done
+	select=${select//a.null/null}
+	[ "$on" = "" ] && echo no pk && return
+	(
+	echo "-- file may contain new rows"		 
+	echo "insert into $tb"		 
+	echo "select ${select:1}"					 
+	echo "from   $tmp as a left join $tb as b on ${on:4}"	
+	echo "where  ${wh:3};"	
+	echo "-- update only rows matching primaray key"		 
+	echo  "update $tb set (${update:1}) ="
+	echo  "       (select  ${update:1} from $tmp"
+	on=${on//a\./$tb\.};on=${on//b\./$tmp\.}
+	echo  " 	   where ${on:4}) "
+	echo  " 	   where ${pk} in (select a.${pk} from $tmp as a inner join $tb as b on a.${pk} = b.${pk});"
+	) >> $read
+}
+function preparedStatement () { 
+	parm='5 Sülzle Uwe'
+	eval 'printf "set id = %s,name = \"%s\", vorname = \"%s\"\n" $parm'
+} 
 function zz () { return; } 
 	ctrl notebook.sh

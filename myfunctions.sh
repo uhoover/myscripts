@@ -69,43 +69,113 @@ function vput () {
 }
 function is_database () { file -b "$*" | grep -q -i "sqlite"; }
 function is_table () {	
-	if [ "$#" -lt "2" ];then return 1;fi 
-	is_database "$1"; if [ "$?" -gt "0" ];then return 1;fi
+	if [ "$#" -lt "2" ];then return $false;fi 
+	is_database "$1"; if [ "$?" -gt "0" ];then return $false;fi
 	local tb=$(sql_execute "$1" ".table $2")
-	if [ "$tb" = "" ];then return 1;else return 0;fi
+	if [ "$tb" = "" ];then return $false;else return $true;fi
 }
 function sql_execute () {
 	set -o noglob 
 	if [ "$sqlerror" = "" ];then sqlerror="/tmp/sqlerror.txt";touch $sqlerror;fi
 	local db="$1";shift;stmt="$@"
-	sql_execute_save $db $stmt
-	return
 	echo -e "$stmt" | sqlite3 "$db"  2> "$sqlerror"  | tr -d '\r'   
 	error=$(<"$sqlerror")
-	if [ "$error"  = "" ];then return 0;fi
+	if [ "$error"  = "" ];then return $true;fi
 	log "$FUNCNAME sql_error: $stmt"
 	setmsg -e --width=400 "sql_execute\n$error\ndb $db\nstmt $stmt" 
-	return 1
+	return $false
 }
-function sql_execute_save () {
-	local db="$1" found=$false update=$false;shift
-	echo $* | tr -s ' ' | tr ' ' '\n' |
-	while read tb; do
-		case "$tb" in
-			"update"|"into"|"from")	found=$true;continue;;
-			*) :
-		esac
-		[ $found -eq $false ] && continue
-		update=$true
-		(echo $tb
-			 echo "pragma foreign_key_list($tb)" | sqlite3 "$db"  | grep -i "restrict\|update" | cut -d ',' -f3) | 
-			 sort -u |
-			 while read -r table;do
-			    is_table "$db" "$tb";if [ "$?" -gt 0 ]; then continue;fi
-				local file=$(getfilename "${tpath}/dump" "$table" "$db" ".sql") 
-				if [ ! -f "$file" ];then utils_ctrl "$db" "$tb" "dump" "$file" ;fi
-			 done
+function sql () {
+	if [ "$1" = "commit" ];		then shift; utils_commit   "$*";return;fi	
+	if [ "$1" = "rollback" ]; 	then shift; utils_rollback "" "$tpath/dump*";return;fi	
+	local db="" tb="" func="" file="" start=1 update=$false delim=""
+	is_database $1; [ $? -eq 0 ] && db=$1 && start=2
+	parm=$(echo $* | tr -d '"' | tr -d "'" | tr [:upper:] [:lower:])
+	IFS=" ";arr=($parm);unset IFS
+	for ((i=$((start-1));i<${#arr[@]};i++));do  
+		arg=${arr[$i]}
+		case $arg in
+			delim=*) 	dl=${arg#*=};;	
+			update)  	tb=${arr[$((i+1))]};update=$true;break;;	
+			insert)  	tb=${arr[$((i+2))]};update=$true;break;;	
+			delete)  	tb=${arr[$((i+2))]};update=$true;break;;	
+			.import|.read)			    	update=$true;break;; 
+			import|read|reload)	
+				file=${arr[$((i+1))]}
+				if [ -f "$file" ];then
+					tb=${arr[$((i+2))]} 
+				else
+					tb=$file;file=""
+				fi
+				utils_ctrl "$db" "$tb" "$arg" "$file" ${dl#*=};return $?
+				;;
+		esac	
 	done
+	if [ "$db"   = "" ];then db=$(getfileselect database_import --save);fi
+	if [ "$db"   = "" ];then setmsg -n "abort..no db selected"; return ;fi
+	if [ $update -eq $true ];then files=$(utils_dump "$db" "$tb" "system");fi
+	sql_execute "$db" ${@:$start}
+	if [ $? -eq $false ];then 
+		for file in $files;do rm $file;done
+		return 1
+	fi 
+	[ $update -eq $true ] && utils_sync
+	return 0
+}
+function utils_commit () 	{ $dbms --func utils_commit 	$*; return $?; }
+function utils_rollback () 	{ $dbms --func utils_rollback $*; return $?; }
+function utils_dump () 		{ $dbms --func utils_dump 	$*; return $?; }
+function utils_sync () 		{ $dbms --func utils_sync 	$*; return $?; }
+function getfileselect () 	{ $dbms --func getfileselect $*; return $?; }
+function getfilename () 	{ $dbms --func getfilename $*; return $?; }
+function tb_meta_info () {
+	local db="$1" tb="$2" row="$3" parms=${@:4}
+	is_table "$db" "$tb";if [ "$?" -gt 0 ];then return 1 ;fi
+	if [ "${parms:${#parms}-1:1}" = "#" ];then parms="${parms}null"  ;fi  # last nullstring not count 
+	local parmlist=$(quote -d "#" $parms)
+	IFS="#";local parmarray=($parmlist);unset IFS 
+	local del="" del2="" del3="" line="" nparmlist="" 
+	GTBNAME="" ;GTBTYPE="" ;GTBNOTN="" ;GTBDFLT="" ;GTBPKEY="";GTBMETA="";GVIEW=$false 
+	GTBSELECT="";GTBINSERT="";GTBUPDATE="";GTBUPSTMT="";GTBSORT="";GTBCOLSIZE="";GTBMAXCOLS=-1
+	meta_info_file=$(getfilename "$tpath/meta_info" "${tb}" "${db}" ".txt")
+	local ip=-1 ia=-1  
+	sql_execute "$db" ".headers off\nPRAGMA table_info($tb)"   > "$meta_info_file"
+	[ "$?" -gt "0" ] && log "error $?: $db" ".headers off\nPRAGMA table_info($tb)" && return 1
+	while read -r line;do
+		GTBMAXCOLS=$(($GTBMAXCOLS+1))
+		IFS=',';arr=($line);unset IFS;ip=$(($ip+1))
+		GTBNAME=$GTBNAME$del"${arr[1]}";GTBTYPE=$GTBTYPE$del"${arr[2]}";GTBNOTN=$GTBNOTN$del"${arr[3]}"
+		GTBDFLT=$GTBDFLT$del"${arr[4]}";GTBPKEY=$GTBPKEY$del"${arr[5]}";GTBCOLSIZE="${GTBCOLSIZE}${del2}1"
+		GTBMETA=$GTBMETA$del2"${arr[2]},${arr[3]},${arr[4]},${arr[5]}"
+		if [ "${arr[2]}" = "INTEGER" ] || [ "${arr[2]}" = "REAL" ] ;then GTBSORT="${GTBSORT}${del2}1";else GTBSORT="${GTBSORT}${del2}0";fi
+		if [ "${arr[5]}" = "1" ] || [ "${arr[1]}" = "rowid" ];then
+			PRIMKEY="${arr[1]}";export ID=$ip;  
+		else
+			ia=$(($ia+1));value="${parmarray[$ia]}"
+			if [ "$value" = "" ] && [ "${arr[3]}" = "0" ];then value="null";fi
+			nparmlist=$nparmlist$del${parmarray[$ip]}
+			GTBSELECT=$GTBSELECT$del3$"${arr[1]}" 	
+			GTBUPSTMT=$GTBUPSTMT$del3$"${arr[1]} = %s" 
+			GTBINSERT=$GTBINSERT$del3$"$value"	
+			GTBUPDATE=$GTBUPDATE$del3$"${arr[1]} = $value";del3=","	
+		fi
+		del=",";del2='|'
+	done < "$meta_info_file"
+	if [ "$PRIMKEY" = "" ];then 
+		view=$(sql_execute "$db" ".header off\nselect type from sqlite_master where name = \"$tb\"")
+		if [ "$view" = "table" ]; then
+			PRIMKEY="rowid";ID=0
+			GTBNAME="rowid$del$GTBNAME";GTBTYPE="INTEGER$del$GTBTYPE";GTBNOTN="1$del$GTBNOTN";GTBSORT="1$del2$GTBSORT"
+			GTBDFLT="' '$del$GTBDFLT";GTBPKEY="1$del$GTBPKEY";GTBMETA="rowid$del2$GTBMETA"
+		else
+			PRIMKEY=${GTBNAME%%\,*};ID=0;GVIEW=$true;GTBSELECT=${GTBNAME#*\,}
+		fi
+	fi 
+	if [ "$parmlist" = "" ];then return;fi
+	nparmlist=${nparmlist//'"null"'/null}
+	nparmlist=${nparmlist//\'null\'/null}
+	GTBINSERT="insert into $tb (${GTBSELECT}) values (${GTBINSERT})"
+	GTBUPDATE="update $tb set ${GTBUPDATE}\n where $PRIMKEY = $row";unset IFS
 }
 function pos () {
 	local str pos x
@@ -247,5 +317,5 @@ function fullpath () {
 	return 1
 }
 	declare _quote='"' true=0 false=1 debug=1 trapoff=1 logenable=0 echoenable=1 script=$(fullpath $0) logoff=1 func=1 tmpf=/tmp/tmpfile.txt
-
+	declare dbms='/home/uwe/my_scripts/dbms.sh' tpath='/tmp'
 #	fhelp
